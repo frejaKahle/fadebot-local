@@ -1,4 +1,4 @@
-import bot, gui, AudioHandler
+import bot, gui, AudioHandler, threading, os
 
 # A bunch of code goes here
 # ..., functions that will
@@ -7,6 +7,16 @@ import bot, gui, AudioHandler
 
 # Right now, it just runs the GUI
 
-if __name__ == '__main__':
-    gui.switch_page = lambda x: print(f"Switching to f{x}")
+def gui_func():
     gui.start_gui(mode='chrome',size=(960,540))
+
+def bot_func():
+    pass
+
+def ain_func():
+    pass
+
+if __name__ == '__main__':
+    gui_thread = threading.Thread(target=gui_func)
+    
+    

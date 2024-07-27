@@ -4,9 +4,11 @@ from typing import Union, Callable, Any
 from collections.abc import Iterable
 from readerwriterlock import rwlock_async
 from sys import getsizeof
+from types import SimpleNamespace
 
-REOC_WAIT = 0
-REOC_SEND_DEF = 1
+REOC = SimpleNamespace()
+REOC.WAIT = 0
+REOC.SDEF = 1
 
 # These class provide a circular linked list buffer for use in audio buffering for fadebot discord audio streaming
 # Each node is a rather simple memory structure containing its data and the link to the next node
@@ -96,6 +98,15 @@ class CircularList():
         del self.read_threads_waiting[0]
         return callback(*args, **kwargs)
 
+    def allow_read(self):
+        with self.write_lock():
+            if self.read_threads_waiting:
+                self.read_threads_waiting[0].set()
+    def allow_write(self):
+        with self.write_lock():
+            if self.write_threads_waiting:
+                self.write_threads_waiting[0].set()
+    
     def insert_new_nodes(self, construction_data: Union[Iterable, tuple[object,int], int] = None, left_node: CircularNode = None) -> int:
         '''Inserts a new set of nodes into the list following left_node, which defaults to current_write, with optional starting data. The behavior of the function changes depending on what type of data is supplied.
         :Union construction_data: the data used to fill the new node(s)
@@ -148,6 +159,9 @@ class CircularList():
                 if (right_node == self.read_ptr and                     # if the node to the right was the read node ...
                     any([ i != None for i in it])):                     # and the data inserted was not empty:
                     self.read_ptr = first_node.nxt                      #  move the current read pointer to the beginning of the insertion
+                    self.allow_read()
+                if (first_node == self.write_ptr):
+                    self.allow_write()
         
         if no_nodes: self.delete_after(left_node)                       # delete the dummy node created for an empty list
         return count                                                    # return the number of added nodes
@@ -191,6 +205,7 @@ class CircularList():
             size = getsizeof(self.write_ptr.data)
         with   (self.write_lock()):                                     # acquire list locks (rw)
             self.write_ptr = self.write_ptr.nxt                         # move to the next node, locks released
+            self.allow_read()
             return size
 
     async def write_async(self,data = None) -> int: 
@@ -209,16 +224,16 @@ class CircularList():
         with   (self.write_lock()):                                     # acquire list locks (rw)
             self.read_ptr = self.read_ptr.nxt                           # move the read pointer
             if unblock and self.read_threads_waiting:
-                self.read_threads_waiting[0].set()                      # allow writing to happen if it caught up, release lock
+                self.allow_write()                                      # allow writing to happen if it caught up, release lock
         return data                                                     # return the read data
 
-    def read(self, reoccurrence_behavior = REOC_WAIT, default_data = None):
+    def read(self, reoccurrence_behavior = REOC.WAIT, default_data = None):
         '''Reads data from the current read node, avoiding reoccurrences, then moves read_ptr node to the next node.'''
         return asyncio.wait_for(asyncio.run_coroutine_threadsafe(       # run the async function blocking
             self.read_async(reoccurrence_behavior=reoccurrence_behavior,
                             default_data=default_data)))
             
-    async def read_async(self,reoccurrence_behavior = REOC_WAIT, default_data = None):
+    async def read_async(self,reoccurrence_behavior = REOC.WAIT, default_data = None):
         '''asynchronously reads data from the current read node, avoiding reoccurrences, then moves read_ptr to the next node.'''
         data = default_data                                             # set a default return value of None
         if reoccurrence_behavior:                                       # Reoccurance behavior: Send Empty
