@@ -19,4 +19,9 @@ def ain_func():
 if __name__ == '__main__':
     gui_thread = threading.Thread(target=gui_func)
     
+    gui_thread.start()
+
+    gui_thread.join()
+
+    
     
