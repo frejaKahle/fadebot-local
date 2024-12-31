@@ -4,7 +4,7 @@ from io import BufferedIOBase
 from discord import FFmpegPCMAudio
 from mutagen import mp3, wave, aiff, aac, ogg, File
 from types import SimpleNamespace
-from typing import IO, Callable, Any, Self
+from typing import IO, Callable, Any, Self, Optional
 from time import time, sleep
 from queue import Queue
 from collections import deque
@@ -33,7 +33,7 @@ REPEAT.ALL = 4  # Repeat setting for repeating everything in the queue
 OPTS = SimpleNamespace()
 OPTS.FFMPEG = {'before_options':'-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin',
                        'options':'-vn'}
-OPTS.YTDLP = {'format':'bestaudio'}
+OPTS.YTDLP = {'format':'bestaudio','noplaylist':True}
 
 def round_to_frame(n):
     '''Takes a number of miliseconds and rounds it to the nearest audio frame timing in ms'''
@@ -255,6 +255,11 @@ class QueueNode:
         self._prv: Self | None = prevnode
         self._nxt: Self | None = nextnode
         self.lock = threading.Lock()
+
+        if self._prv:
+            with self._prv.lock: self._prv._nxt = self
+        if self._nxt:
+            with self._nxt.lock: self._nxt._prv = self
     def insert(self, node: Self | Track):
         with self.lock: prv = self._prv
         if isinstance(node, Track):
@@ -457,17 +462,34 @@ class TrackQueue(FFmpegPCMAudio):
                 elif self.start: self.add_new_track(self.start)                     # -> IF the queue is new and a song has been added: add it to the currently playing songs
             sleep(0.02)                                                             # Wait a fifth of a second
     def queue(self):
-        node = self.add_track_queue.get()
-        if callable(node): node = TrackNode(node())
-        self.start = node
-        self.end = node
-        while(not self.stop.is_set()):
-            l = []
-            while not self.add_track_queue.empty():
-                l.append(self.add_track_queue.get())
-            for node in l:
-                if callable(node): node = TrackNode(node())
-                self.end.append(node)
+        def add_node_or_playlist():
+            toadd = self.add_track_queue.get()
+            #playlist
+            if isinstance(toadd,dict):
+                if len(toadd['i']) > 0:
+                    s1 = TrackNode(toadd['i'][0](),prevnode=self.end)
+                    n = s1
+                    for t in toadd['i'][1:]: n = TrackNode(t(),prevnode=n)
+                    s2 = TrackNode(toadd['m'][0](),prevnode=n)
+                else:
+                    s1 = s2 = TrackNode(toadd['m'][0](),prevnode=self.end)
+                n = s2
+                for t in toadd['m'][1:]: n = TrackNode(t(),prevnode=n)
+                n = PlaylistDelimiter((REPEAT.PLM,s2),toadd['mrm'],toadd['rrm'],prevnode=n)
+                for t in toadd['o']: n = TrackNode(t(),prevnode=n)
+                n = PlaylistDelimiter((REPEAT.PLA,s1),toadd['mrw'],toadd['rrw'],prevnode=n)
+                self.end = n
+            # single track
+            else:
+                if callable(toadd): toadd = TrackNode(toadd(),prevnode=self.end)
+                elif isinstance(toadd,TrackNode):
+                    if self.end != None: self.end.append(toadd)
+                    else: self.end = toadd
+        
+        add_node_or_playlist()
+        self.start = self.end.getbeginning()
+        while(not self.stop.is_set()): 
+            add_node_or_playlist()
             sleep(0.2)
 
     def accept_commands(self):
@@ -527,20 +549,11 @@ class TrackQueue(FFmpegPCMAudio):
     def add_playlist_to_queue(self, intro: list[dict], main:  list[dict], outro: list[dict], 
                               max_repeats_main: int = -1, repeat_regardless_main: bool = False,
                               max_repeats_whole: int = -1, repeat_regardless_whole: bool = False):
-        if intro:
-            s1 = TrackNode(self.get_add_song_func(**intro[0])())
-            s2 = TrackNode(self.get_add_song_func(**main[0])())
-            self.add_track_queue(s1)
-            for ti in intro[1:]: self.add_song_to_queue(**ti)
-        else:
-            s1 = s2 = TrackNode(self.get_add_song_func(**main[0])())
-        p1 = PlaylistDelimiter((2,s2),max_repeats_main,repeat_regardless_main)
-        p2 = PlaylistDelimiter((3,s1),max_repeats_whole,repeat_regardless_whole)
-        self.add_track_queue.put(s2)
-        for ti in main[1:]: self.add_song_to_queue(**ti)
-        self.add_track_queue.put(p1)
-        for ti in outro: self.add_song_to_queue(**ti)
-        self.add_track_queue.put(p2)
+        lg = lambda x: [self.get_add_song_func(**track) for track in x]
+        i = lg(intro)
+        m = lg(main)
+        o = lg(outro)
+        self.add_track_queue.put({'i':i,'m':m,'o':o,'mrm':max_repeats_main,'rrm':repeat_regardless_main,'mrw':max_repeats_whole,'rrw':repeat_regardless_whole})
 
     def command(self, command: str):
         '''
