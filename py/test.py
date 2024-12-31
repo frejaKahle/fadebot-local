@@ -1,22 +1,9 @@
-from typing import Callable
+import discord, yt_dlp
+#,'hls_prefer_native':{'m3u8': 'ffmpeg'}
+with yt_dlp.YoutubeDL({'format':'bestaudio','extractor_args':{'youtube':{'player_client':['-mweb','ios'],'skip':['dash'],'player_skip':['webpage','configs','js']}}}) as ydl:
+    song_info = ydl.extract_info("https://www.youtube.com/watch?v=OzyC4RVTilI", download=False)
 
-class c1():
-    def __init__(self, time: float) -> None:
-        self.time = time
-    def default_time(self)-> float: return self.time
+a = discord.FFmpegPCMAudio(song_info['url'], before_options='-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin',options='-vn',)
+for i in range(20):
+    print(a.read())
 
-class c2():
-    def __init__(self, time: Callable[[],float]) -> None:
-        self.time: Callable[[],float] = time
-class c3():
-    def __init__(self, time: Callable[[],float]) -> None:
-        self.time: Callable[[],float] = lambda: time() * 2.0
-
-a = c1(2.0)
-b = c2(a.default_time)
-c = c3(b.time)
-print (a.time,a.default_time(),c.time())
-a.time = 4.0
-print (a.time,a.default_time(),c.time())
-b.time = lambda: 3.0
-print (a.time,a.default_time(),c.time())
