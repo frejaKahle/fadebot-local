@@ -42,5 +42,5 @@ class SharedConfig(SharedResource):
             self.__res.update(*args,**kwargs)
             self.__rewrite()            
 
-def_cfg = SharedConfig(os.path.abspath("config/default.json"))
-usr_cfg = SharedConfig(os.path.abspath("config/user.json"))
+aio_cfg = SharedConfig(os.path.abspath("config\\audioplayer.json"))
+bot_cfg = SharedConfig(os.path.abspath("config\\bot.json"))

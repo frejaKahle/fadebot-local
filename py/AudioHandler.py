@@ -44,6 +44,7 @@ class SingleBufferedAudio:
         self.audio: np.ndarray = ZERO_FRAME.copy()
         self.w = threading.Event()
         self.r = threading.Event()
+        self.__escaped = False
         self.w.set()
 
     def write(self, data: bytes | np.ndarray):
@@ -51,6 +52,7 @@ class SingleBufferedAudio:
         if isinstance(data,bytes):
             data = np.frombuffer(data,'int16')
         self.w.wait()
+        if self.__escaped: return
         self.audio = data
         self.w.clear()
         self.r.set()
@@ -58,10 +60,15 @@ class SingleBufferedAudio:
     def read(self) -> np.ndarray:
         '''Reads audio from the buffer'''
         self.r.wait()
+        if self.__escaped: return np.ndarray([])
         data = self.audio
         self.r.clear()
         self.w.set()
         return data
+    def escape(self):
+        self.__escaped = True
+        self.r.set()
+        self.w.set()
 
 class ProgressibleFFmpegPCMAudio(FFmpegPCMAudio):
     def __init__(self, source: str | BufferedIOBase, end_time: int, pass_time: int = 0, **kwargs) -> None:
@@ -85,14 +92,15 @@ class ProgressibleFFmpegPCMAudio(FFmpegPCMAudio):
         while(self.end_time > 0 and self.source_progress + self.pass_time <= self.end_time):
             data = super().read()
             self.source_progress += 20
-            self.raw_queue.write(data)
+            self.raw_queue.write(data)\
+            
 
         self.raw_queue.write(ZERO_FRAME.copy())
         self.raw_queue.write(np.array([]))        
     def end(self):
-        self.end_time = 1
-        self.read()
+        self.raw_queue.escape()
         self.thread.join()
+        super().cleanup()
     def read(self) -> np.ndarray[Any, np.int16] | None:
         '''Reads audio from the PCMAudio source'''
         self.true_progress += 20
@@ -123,7 +131,7 @@ class Track():
         
     def __init__(self,
                  stream_creator: Callable[[],ProgressibleFFmpegPCMAudio], name: str, artist:  str, image: str | None,
-                 album: str | None, year: int, volume: float = 1.0, fade_settings: Callable[[],tuple[int,int]] = lambda: (0, 0),
+                 album: str | None, year: int, volume: float = 1.0, fade_settings: tuple[Callable[[],int],Callable[[],int]] = lambda: (0, 0),
                  fade_function: Callable[[np.ndarray[Any,np.int16],float,float],np.ndarray[Any,np.int16]] = fastfade) -> None:
         '''
         This class represents an audio source that also includes settings such as volume and crossfade timings. The stream is created by a callback funtion to allow restarting the song.
@@ -145,25 +153,31 @@ class Track():
         self.year: str | None = year
 
         self.volume = max(min(volume,1.0),0.001)                # Volume 
-        self.fade_settings: Callable[[],tuple[int,int]] = fade_settings  # Fade in/out timing in ms
+        self.fade_in, self.fade_out = fade_settings  # Fade in/out timing in ms
         self.fade_progress: int = 0
         self.fade_function: Callable[[np.ndarray[Any,np.int16],float,float]
                                      ,np.ndarray[Any,np.int16]] = fade_function # Fade multiplier fuctio
-        self.stream: ProgressibleFFmpegPCMAudio | None = None
+        self.stream: Optional[ProgressibleFFmpegPCMAudio] = None
+        self.ending: bool = False
 
     def start(self): 
         self.stream = self.stream_creator()
         self.stream.create_writer()
-        if self.fade_settings()[0] > 0:
-            self.__class__ = Fade_In
     def restart(self): self.start()
     def read(self):
         data = self.stream.read()
-        if self.stream.true_progress + self.fade_settings()[1] >= self.stream.end_time or data.size == 0:
-            self.__class__ = Fade_Out
-        return data, self.volume
+        m: float | np.ndarray[np.float64] = self.volume
+        match self.stream.true_progress, (self.stream.end_time - self.stream.pass_time), self.fade_in(), self.fade_out():
+            case a,b,c,d if a+d >= b:
+                m *= self.fade_function(b-a,d)
+                self.ending = True
+            case a,b,c,d if a <= c:
+                m *= self.fade_function(a,c)
+        return data, m
+
     def skip(self):
-        self.stream.end_in(self.fade_settings()[1]*1000)
+        self.ending = True
+        self.stream.end_in(min(self.fade_out(),self.stream.true_progress))
     @property
     def percent_progress(self) -> float:
         '''Returns a value between 0 and 1 representing the song's completion'''
@@ -178,7 +192,7 @@ class Track():
         return self.stream.check_time()
 
     def copy(self) -> Self:
-        return Track(self.stream_creator,self.name,self.artist,self.image,self.album,self.year,self.volume,self.fade_settings,self.fade_function)
+        return Track(self.stream_creator,self.name,self.artist,self.image,self.album,self.year,self.volume,(self.fade_in,self.fade_out),self.fade_function)
 
     @classmethod
     def _verify_and_apply_section(cls, stream_url: str, limits: tuple[float, float], duration, min_dur: int, **song_info) -> Self:
@@ -195,7 +209,7 @@ class Track():
         return Track(sc, **song_info)
 
     @classmethod
-    def from_yt(cls, url: str, limits: tuple[float, float] = (0.0,-1.0), min_dur: int = 5, volume: float = 1.0, fade_settings: Callable[[],tuple[int, int]] = lambda: (0,0)) -> Self:
+    def from_yt(cls, url: str, limits: tuple[float, float] = (0.0,-1.0), min_dur: int = 5, volume: float = 1.0, fade_settings: tuple[Callable[[],int],Callable[[],int]] = lambda: (0,0)) -> Self:
         with yt_dlp.YoutubeDL(OPTS.YTDLP) as ydl:
             song_info = ydl.extract_info(url, download=False)
             durtn = song_info['duration']
@@ -218,7 +232,7 @@ class Track():
                                             image = song_info['thumbnail'],
                                             volume = volume, fade_settings = fade_settings)
     @classmethod
-    def from_file(cls, file_location: str, limits: tuple[float, float] = (0.0,-1.0), min_dur: int = 5, volume: float = 1.0, fade_settings: Callable[[],tuple[int, int]] = lambda: (0,0)) -> Self:
+    def from_file(cls, file_location: str, limits: tuple[float, float] = (0.0,-1.0), min_dur: int = 5, volume: float = 1.0, fade_settings: tuple[Callable[[],int],Callable[[],int]] = lambda: (0,0)) -> Self:
         match file_location:
             case x if len(x) < 5: raise ValueError("Filename invalid: Too Short")
             case x if x[-4:] == '.mp3':     fi = mp3.MP3(x)
@@ -234,22 +248,7 @@ class Track():
                                 album = fi['TALB'][0], year = int(fi['TDRC'][0]),
                                 image = None,
                                 volume = volume, fade_settings = fade_settings)
-class Fade_In(Track):
-    '''A song that is currently fading in (for internal use)'''
-    def read(self):
-        self.fade_progress += 20
-        data = self.stream.read()
-        m = self.fade_function(self.fade_progress, self.fade_settings()[0])
-        if self.fade_progress >= self.fade_settings()[0]:
-            self.__class__ = Track
-        return data, m * self.volume
-class Fade_Out(Track):
-    '''A song that is currently fading out (for internal use)'''
-    def read(self):
-        data = self.stream.read()
-        m = self.fade_function(self.stream.end_time - self.stream.true_progress, self.fade_settings()[1])
-        return data, m * self.volume
-
+        
 class QueueNode:
     def __init__(self, prevnode: Self | None = None, nextnode: Self | None = None):
         self._prv: Self | None = prevnode
@@ -312,9 +311,7 @@ class QueueNode:
         return node
     
     def getnext(self, repeat_setting: int = 0) -> Self | None:
-        self.lock.acquire()
-        n = self._nxt
-        self.lock.release()
+        with self.lock: n = self._nxt
         if n.__class__ == PlaylistDelimiter:
             return n.getnext(repeat_setting)
         return n
@@ -342,9 +339,9 @@ class TrackNode(QueueNode):
         super().__init__(prevnode,nextnode)
         self.track = track
     def getnext(self, repeat_setting = 0):
-        if repeat_setting == 1:
-            return self.replace(self.track.copy())
-        return super().getnext(repeat_setting)
+        if repeat_setting == REPEAT.ONE or (r := super().getnext(repeat_setting)) == self:
+            r = self.replace(self.track.copy())
+        return r
 class PlaylistDelimiter(QueueNode):
     def __init__(self,return_to_node_with_setting: tuple[int,TrackNode], max_repeats: int = -1, repeat_regardles:bool = False, prevnode: QueueNode | None = None, nextnode: QueueNode | None = None):
         super().__init__(prevnode,nextnode)
@@ -400,10 +397,8 @@ class TrackQueue(FFmpegPCMAudio):
     '''overwritten in __init__, subclass may implement by passing a callable read_func parameter to __init__ or by assinging self.read after super().__init__ is called'''
     def close(self):
         self.stop.set()
-        n = self.start
-        while(n):
+        for n in self.current:
             n.track.stream.end()
-            n = n._nxt
         self.add_track_queue(QueueNode())
         self.writer.join()
         self.cmder.join()
@@ -420,25 +415,28 @@ class TrackQueue(FFmpegPCMAudio):
             for node in list(self.current):
                 if node.track.stream and node.track.stream.source_progress > 0:
                     inp = node.track.read()
+                    if inp == None: continue
                     if inp[0].shape[0] > 0:
                         data += inp[0].astype(np.float64) * inp[1] * self.volume
                     else:
                         if node not in self.history:
                             self.add_track_history(node)
+                        node.track.stream.end()
                         self.current.remove(node)
                         
             self.buffer.write(data)
     def add_new_track(self,node):
         if node in self.current:
-            self.current.append(self.current.pop(self.current.index(node)))
+            self.current.remove(node)
+            node.track.restart()
+            self.current.append(node)
         else: 
             self.current.append(node)
             node.track.start()
     def add_track_history(self,node):
         if node in self.history:
-            i = len(self.history) - self.history.index(node)
-            self.history.rotate(i)
-        else: self.history.append(node) 
+            self.history.remove(node)
+        self.history.append(node) 
     def track_start_end_logic(self):
         while(not self.stop.is_set()):
             if self.current:
@@ -446,21 +444,22 @@ class TrackQueue(FFmpegPCMAudio):
                 nxt = now_playing.getnext(self.repeat)                              # IF THERE ARE ONE OR MORE CURRENTLY PLAYING SONGS:]
                 if (nxt):                                                           # -> IF the most recent track has a track following it in the queue:
                     tte: int = now_playing.track.stream.time_to_end                 # -> -> find the playing track's time till end
-                    if (tte < now_playing.track.fade_settings()[1] 
-                        and now_playing not in self.history):
-                        self.add_track_history(now_playing)
+                    if (tte < now_playing.track.fade_out()):
+                        if(now_playing not in self.history):
+                            self.add_track_history(now_playing)
                         with nxt.lock:                                              # -> -> lock the following track
-                            b = nxt.track.fade_settings()[0] >= tte                 # -> -> IF the following track can start fading in:
+                            b = nxt.track.fade_in() >= tte                          # -> -> IF the following track can start fading in:
                         if b: self.add_new_track(nxt)                               # -> -> -> add it to the queue
-                elif (self.repeat == 4 and self.start):                             # -> IF the most recent track is the end of the queue and repeat-all is on
+                elif (now_playing.track.ending and self.repeat == 4 and self.start):# -> IF the most recent track is the end of the queue and repeat-all is on
                     self.add_new_track(self.start)                                  # -> -> add the song from the beginning of the queue again
                 #await asyncio.sleep(FRAMELENSEC)                                   # -> Wait one audio frame before looping
             else:                                                                   # IF THERE ARE NO CURRENTLY PLAYING SONGS:
                 if self.history:                                                    # -> IF there is a history of tracks
+                    print('hello')
                     t = self.history[-1].getnext(self.repeat)                       # -> -> IF the latest addition to the history has a new following track in the queue
                     if t: self.add_new_track(t)                                     # -> -> -> add that following track to the currently playing list
                 elif self.start: self.add_new_track(self.start)                     # -> IF the queue is new and a song has been added: add it to the currently playing songs
-            sleep(0.02)                                                             # Wait a fifth of a second
+            sleep(0.01)                                                             # Wait a fifth of a second
     def queue(self):
         def add_node_or_playlist():
             toadd = self.add_track_queue.get()
@@ -493,14 +492,23 @@ class TrackQueue(FFmpegPCMAudio):
             sleep(0.2)
 
     def accept_commands(self):
-        def skip(): 
-            if self.current: self.current[-1].track.skip()
+        def skip():
+            i = 0
+            print(self.current)
+            try: 
+                while self.current[i].track.ending: i += 1
+            except: return 
+            if self.current: self.current[i].track.skip()
         def skip_playlist():
             if self.current and (p := self.current[-1].end_of_playlist(self.repeat)):
-                self.current[-1].track.skip()
-                self.add_track_history(self.current[-1])
                 if p._nxt: self.add_new_track(p._nxt)
                 else: self.add_track_history(p)
+                i = 0
+                try: 
+                    while self.current[i].track.ending: i += 1
+                except: return
+                self.current[i].track.skip()
+                self.add_track_history(self.current[-1])
         def rewind():
             if self.current:
                 if self.current[-1].track.stream.true_progress > 3000:
@@ -528,28 +536,32 @@ class TrackQueue(FFmpegPCMAudio):
             l = command.split(' ',3)
             des = l[0]
             match des:
-                case "skip": skip()
+                case "skip":   skip()
                 case "skip_playlist": skip_playlist()
                 case "rewind": rewind()
-                case "pause": pause()
+                case "pause":  pause()
                 case "resume": resume()
                 case "volume": volume(float(l[1]))
                 case "repeat": repeat(int(l[1]))
-                case "fade": fade_setting(float(l[1]),float(l[2]))
+                case "fade":   fade_setting(float(l[1]),float(l[2]))
     
-    def get_add_song_func(self, location:str, limits:tuple[float,float] = (0.,-1.), volume: float = 1.0, fade_settings: tuple[float,float] | None = None):
-        true_fade_settings = (int(s*1000) for s in fade_settings) if fade_settings and (fade_settings[0] or fade_settings[1]) else (lambda: self.fade)
+    def __get_add_song_func(self, location:str, start:float = 0., end:float = -1., volume: float = 1.0, fade_in: Optional[float] = None, fade_out: Optional[float] = None):
+        def fmt(s,o): 
+            if s and s > 0: f = lambda: int(s*1000)
+            else: f = lambda: int(self.fade[o]*1000)
+            return f
+        true_fade_settings = fmt(fade_in,0), fmt(fade_out,1)
         gen = Track.from_file if '.' in location[-5:] else Track.from_yt
-        def f(): return gen(location,limits, volume=volume, fade_settings=true_fade_settings)
+        def f(): return gen(location,(start,end), volume=volume, fade_settings=true_fade_settings)
         return f
 
-    def add_song_to_queue(self, location:str, limits:tuple[float,float] = (0.,-1.), volume: float = 1.0, fade_settings: tuple[float,float] | None = None):
-        self.add_track_queue.put(self.get_add_song_func(location,limits,volume,fade_settings))
+    def add_song_to_queue(self, location:str, start:float = 0., end:float = -1., volume: float = 1.0, fade_in: Optional[float] = None, fade_out: Optional[float] = None):
+        self.add_track_queue.put(self.__get_add_song_func(location,start,end,volume,fade_in,fade_out))
     
     def add_playlist_to_queue(self, intro: list[dict], main:  list[dict], outro: list[dict], 
                               max_repeats_main: int = -1, repeat_regardless_main: bool = False,
                               max_repeats_whole: int = -1, repeat_regardless_whole: bool = False):
-        lg = lambda x: [self.get_add_song_func(**track) for track in x]
+        lg = lambda x: [self.__get_add_song_func(**track) for track in x]
         i = lg(intro)
         m = lg(main)
         o = lg(outro)
@@ -567,6 +579,5 @@ class TrackQueue(FFmpegPCMAudio):
         if self.current: return self.current[-1]
         return None
         
-
-
+class DigitalAudioTransformer: pass
 #TODO: echo, reverb, muffling?

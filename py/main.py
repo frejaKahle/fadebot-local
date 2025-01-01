@@ -1,5 +1,9 @@
-import bot, gui, AudioHandler, threading, os
+import gui, threading, os
+from bot import generate_bot
 from time import sleep
+from cfg import aio_cfg
+from AudioHandler import TrackQueue, DigitalAudioTransformer, REPEAT
+
 
 # A bunch of code goes here
 # ..., functions that will
@@ -12,34 +16,24 @@ def gui_func():
     gui.start_gui(mode='chrome',size=(960,540))
 
 def bot_func():
-    pass
+    bot, thread = generate_bot()
+    queue = TrackQueue(1.,REPEAT.PLM,[5.,5.])
 
-def ain_func():
-    queue = AudioHandler.TrackQueue(1.,2,[2.,2.])
-    queue.add_playlist_to_queue([],[{'location':"https://www.youtube.com/watch?v=OzyC4RVTilI"}],[])
-    queue.add_song_to_queue("https://www.youtube.com/watch?v=nsjgcZUZ-b0")
-    sleep(5)
-    print(queue.start,queue.start._nxt,queue.start._nxt._nxt,queue.start._nxt._nxt._nxt)
-    cmd = 'skip_playlist'
-    for i in range(2000):
-        d = queue.read()
-        if i == 999:
-            print(cmd)
-            queue.command(cmd)
-        if i%50 == 49:
-            print(d[:10])
-        sleep(0.01)
+    bot.call_async_method(bot.play_audio,queue)
     
-    print('?')
-    print(queue.history)
-    queue.close()
-    print(".")
+    queue.add_playlist_to_queue([],[{'location':"https://www.youtube.com/watch?v=fcVdS60wyOQ",'start':30.0},{'location':'https://www.youtube.com/watch?v=GQPZivMuQvk'}],[])
+    queue.add_song_to_queue("https://www.youtube.com/watch?v=4cROKrDAguo",volume=0.5)
+    queue.add_song_to_queue("https://www.youtube.com/watch?v=N0KlwU8O5bA")
+    queue.add_song_to_queue("https://www.youtube.com/watch?v=55IyfpL58gw")
+
+    thread.join()
 
 if __name__ == '__main__':
     #gui_thread = threading.Thread(target=gui_func)
     #ain_thread = threading.Thread(target=ain_func)
     
-    ain_func()
+    bot_func()
+    #ain_func()
 
     #gui_thread.start()
     #ain_thread.start()
