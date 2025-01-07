@@ -92,14 +92,14 @@ body {
   }
   .topnav a#nav-settings img {
     filter: invert(1);
-    transition: transform 1s ease-in-out;
+    transition: transform 0.5s ease-in-out;
   }
   .topnav a#nav-settings:hover img {
-    transform: rotate(-180deg);
+    transform: rotate(-90deg);
   }
   .topnav a#nav-settings.active img {
     
-    transform: rotate(540deg);
+    transform: rotate(270deg);
   }
 
   /* Change the color of links on hover */

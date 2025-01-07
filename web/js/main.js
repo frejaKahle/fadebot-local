@@ -1,9 +1,6 @@
 document.getElementById("nav-home").addEventListener("click", ()=>{eel.switch_page("home")}, false);
 document.getElementById("nav-playlists").addEventListener("click", ()=>{eel.switch_page("playlists")}, false);
 document.getElementById("nav-discord").addEventListener("click", ()=>{eel.switch_page("discord")}, false);
-document.getElementById("nav-spotify").addEventListener("click", ()=>{eel.switch_page("spotify")}, false);
-document.getElementById("nav-youtube").addEventListener("click", ()=>{eel.switch_page("youtube")}, false);
-document.getElementById("nav-soundcloud").addEventListener("click", ()=>{eel.switch_page("soundcloud")}, false);
 document.getElementById("nav-settings").addEventListener("click", ()=>{eel.switch_page("settings")}, false);
 
 eel.expose(change_content);

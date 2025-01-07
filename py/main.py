@@ -13,7 +13,7 @@ from AudioHandler import TrackQueue, DigitalAudioTransformer, REPEAT
 # Right now, it just runs the GUI
 
 def gui_func():
-    gui.start_gui(mode='chrome',size=(960,540))
+    gui.start_gui(mode='firefox-app',size=(960,540))
 
 def bot_func():
     bot, thread = generate_bot()
@@ -29,16 +29,16 @@ def bot_func():
     thread.join()
 
 if __name__ == '__main__':
-    #gui_thread = threading.Thread(target=gui_func)
+    gui_thread = threading.Thread(target=gui_func)
     #ain_thread = threading.Thread(target=ain_func)
     
-    bot_func()
+    #bot_func()
     #ain_func()
 
-    #gui_thread.start()
+    gui_thread.start()
     #ain_thread.start()
 
-    #gui_thread.join()
+    gui_thread.join()
     #ain_thread.join()
 
     

@@ -545,18 +545,18 @@ class TrackQueue(FFmpegPCMAudio):
                 case "repeat": repeat(int(l[1]))
                 case "fade":   fade_setting(float(l[1]),float(l[2]))
     
-    def __get_add_song_func(self, location:str, start:float = 0., end:float = -1., volume: float = 1.0, fade_in: Optional[float] = None, fade_out: Optional[float] = None):
+    def __get_add_song_func(self, location:str, start:float = 0., end:float = -1., volume: float = 1.0, fade_in: Optional[float] = None, fade_out: Optional[float] = None, pre_searched: bool = False):
         def fmt(s,o): 
             if s and s > 0: f = lambda: int(s*1000)
             else: f = lambda: int(self.fade[o]*1000)
             return f
         true_fade_settings = fmt(fade_in,0), fmt(fade_out,1)
-        gen = Track.from_file if '.' in location[-5:] else Track.from_yt
+        gen = Track._verify_and_apply_section if pre_searched else (Track.from_file if '.' in location[-5:] else Track.from_yt)
         def f(): return gen(location,(start,end), volume=volume, fade_settings=true_fade_settings)
         return f
 
-    def add_song_to_queue(self, location:str, start:float = 0., end:float = -1., volume: float = 1.0, fade_in: Optional[float] = None, fade_out: Optional[float] = None):
-        self.add_track_queue.put(self.__get_add_song_func(location,start,end,volume,fade_in,fade_out))
+    def add_song_to_queue(self, location:str, start:float = 0., end:float = -1., volume: float = 1.0, fade_in: Optional[float] = None, fade_out: Optional[float] = None, pre_searched: bool = False):
+        self.add_track_queue.put(self.__get_add_song_func(location,start,end,volume,fade_in,fade_out,pre_searched))
     
     def add_playlist_to_queue(self, intro: list[dict], main:  list[dict], outro: list[dict], 
                               max_repeats_main: int = -1, repeat_regardless_main: bool = False,
