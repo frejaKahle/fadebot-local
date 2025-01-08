@@ -1,0 +1,35 @@
+<div class="columns">
+    <div class="rows">
+        <div class="content-section columns" style="flex: 0 0;">
+            <div class="form columns" id="queue_song">
+                <input name="location" placeholder="Individual Track Queue" required/>
+                <button name="submit">Submit</button>
+            </div>
+            <div class="form columns" action="queue_playlist" id="queue_playlist">
+                <select name="playlist_queue" id="playlist_queue" required>
+                    <option value="" disabled selected hidden>Playlist Queue</option>
+                </select>
+                <button name="submit">Submit</button>
+            </div>
+        </div>
+        <div class="content-section columns" id="now_playing"></div>
+        <div class="content-section columns" style="flex: 0 0 0.5em;"></div>
+    </div>   
+    <div class="content-section" id="timeline"></div>
+</div>
+<script>
+    const qs = document.getElementById("queue_song")
+    const qp = document.getElementById("queue_playlist")
+    qs.lastElementChild.onclick = function(e) {
+        x = qs.children[0].value
+        if (x == "") {return}
+        console.log(`queueing song: ${x}`)
+        eel.queue_song(x)
+    }
+    qp.lastElementChild.onclick = function(e) {
+        x = qs.children[1].value
+        if (x == "") {return}
+        console.log(`queueing playlist: ${x}`)
+        eel.queue_playlist(x)
+    }
+</script>

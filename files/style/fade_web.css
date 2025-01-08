@@ -1,0 +1,176 @@
+:root {
+  --tl-color:   #120e12;
+  --cs-color:   #252226;
+  --bg-color:   #2d2b2e;
+  --nav-color:  #353236;
+  --hl-color:   #3d3b3e;
+  --hv-color:   #454246;
+  --txt-color:  #f2f2f2;
+  --hvtxt-color:#fff;
+  --btn-rad:      max(0.5vh,3px);
+  --con-rad:      calc(2.5 * var(--btn-rad));
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+html {
+  background-color: var(--bg-color);
+  color: var(--txt-color);
+}
+
+body {
+  --body-margin: 8px;
+  height: calc(100vh - 2 * var(--body-margin));
+  margin: var(--body-margin);
+  display: flex;
+  flex-direction: column;
+  min-height: 270px;
+  min-width: 480px;
+}
+
+#main_content {
+  flex:1;
+  width: 100%;
+}
+
+.content-section {
+  background-color: var(--cs-color);
+  border-radius: var(--con-rad);
+  display: flex;
+  flex: 1;
+}
+
+.columns {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+}
+.columns>* {
+  flex:1;
+  margin: 5px 0 5px 5px;
+}
+.columns>.rows {
+  margin: 0 0 0 5px;
+}
+.columns>*:last-child {
+  margin: 5px;
+}
+.columns>.rows:last-child {
+  margin: 0 5px 0 5px;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.rows>* {
+  flex:1;
+  margin: 5px 5px 0 5px;
+}
+.rows>*:last-child {
+  margin: 5px;
+}
+.rows>.columns {
+  margin: 5px 0 0 0;
+}
+.rows>.columns:last-child {
+  margin: 5px 0 5px 0;
+}
+
+/* Add a black background color to the top navigation */
+.topnav {
+  overflow: hidden;
+  border-bottom: solid var(--hv-color) 0.2vh;
+  margin-bottom: 0.3vh;
+  font-size: max(1.8vh,14px);
+}
+
+/* Style the links inside the navigation bar */
+.topnav a {
+  float: left;
+  background-color: var(--nav-color);
+  transition-property: background-color color;
+  transition: 200ms linear;
+  border-top-left-radius: var(--btn-rad);
+  border-top-right-radius: var(--btn-rad);
+  border: solid var(--hl-color);
+  margin: 0 0.2vw;
+  border-width: 1px 1px 0 1px;
+  text-align: center;
+  padding: 0.8vh 1.4vh;
+  text-decoration: none;
+}
+.topnav a img {
+  width: 1.35em;
+  height: 1.35em;
+  filter: drop-shadow(0 0 1px black);
+}
+
+.topnav a#nav-settings {
+  float: right;
+  position: relative;
+}
+.topnav a#nav-settings img {
+  filter: invert(1);
+  transition: transform 0.5s ease-in-out;
+}
+.topnav a#nav-settings:hover img {
+  transform: rotate(-90deg);
+}
+.topnav a#nav-settings.active img {
+  
+  transform: rotate(270deg);
+}
+
+/* Change the color of links on hover */
+.topnav a:hover {
+  background-color: var(--hv-color);
+  color: var(--hvtxt-color);
+}
+
+/* Add a color to the active/current link */
+.topnav a.active {
+  background-color: var(--hl-color);
+}
+
+#timeline {
+  flex: 0 0 8vh;
+  background-color: var(--tl-color);
+}
+
+#timeline::before{
+  content: '';
+  position: relative;
+  left: 50%;
+  top: 50%;
+  height: calc(100% + 2px);
+  width: 0.5vh;
+  background-color: var(--bg-color);
+  transform: translate(-50%, -50%);
+}
+
+form *,.form * {
+  font-size: calc(1vw + 1vh + 10px);
+  height: calc(1vw + 1vh + 0.5em + 10px);
+  background-color: var(--bg-color);
+  color: var(--txt-color);
+  outline: none;
+  border: none;
+  border-radius: 1em;
+  padding: 0 0.5em 0 0.5em;
+}
+
+select option {
+  color: var(--txt-color);
+  font-size: 0.8em;
+}
+
+input[type="submit"],.form>button {
+  flex: 0 1 !important;
+  color: var(--txt-color);
+}
+
+input[type="text"] {
+  flex: 1 !important;
+  color: var(--txt-color);
+}

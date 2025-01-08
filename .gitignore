@@ -4,3 +4,9 @@
 /config/*
 /py/test.py
 **/playlists/*
+**/build/
+**/dist/
+main.spec
+pip
+build.py
+prebuild.py

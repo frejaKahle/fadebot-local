@@ -6,7 +6,17 @@ document.getElementById("nav-settings").addEventListener("click", ()=>{eel.switc
 eel.expose(change_content);
 function change_content(html) {
     content_div = document.getElementById("main_content");
+    while (content_div.firstChild) {
+        content_div.removeChild(content_div.lastChild);
+      }
     content_div.innerHTML = html;
+    scripts = document.querySelectorAll("script");
+    if (scripts.length > 2) {
+        text = scripts[scripts.length - 2].textContent;
+        var newScript = document.createElement("script");
+        newScript.textContent = text;
+        content_div.appendChild(newScript);
+    }
 }
 
 eel.expose(switch_active_nav);
