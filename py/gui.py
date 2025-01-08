@@ -1,24 +1,34 @@
 import eel
 from os.path import abspath
 
+import eel.msIE
+from gui_pages import pages
+
 ## Globals
 current_page = ""
 EMPTY_FUNCTION = lambda: None
 
+eel.init('files')
 
-eel.init('web')
+global queue
 
-def start_gui(**kwargs):
-    eel.start('../index.html',**kwargs)
+def start_gui(track_queue, on_close, **kwargs):
+    global queue
+    queue = track_queue
+    eel.start('../index.html', close_callback=on_close, **kwargs)
+    print('DONE')
+    
+@eel.expose
+def queue_song(location: str):
+    queue.add_song_to_queue(location)
+        
 
 @eel.expose
 def switch_page(pagename : str):
     '''Switches the content on the web gui to a differe page located at ../web/pages/<pagename>.html'''
     global current_page
     if pagename != current_page:
-        with open(f'{abspath('')}\\web\\pages\\{pagename}.html', 'r',encoding='utf-8') as f:
-            html_string = f.read()
-            eel.change_content(html_string)
+        eel.change_content(pages[pagename])
         eel.switch_active_nav(f'nav-{current_page}',f'nav-{pagename}')
         current_page = pagename
 

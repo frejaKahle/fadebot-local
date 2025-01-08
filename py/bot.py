@@ -45,10 +45,9 @@ def generate_bot() -> tuple[FadeBot, threading.Thread]:
     intents.message_content = True
     bot = FadeBot("X!", intents=intents)
     t = threading.Thread(target=bot.run,args=[fadebot_token])
-    
+
     t.start()
     bot.ready.wait()
-
     return bot, t
 
     

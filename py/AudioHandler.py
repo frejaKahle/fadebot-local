@@ -358,15 +358,15 @@ class PlaylistDelimiter(QueueNode):
 
 class TrackQueue(FFmpegPCMAudio):
     def __init__(self, volume: float = 1.0, repeat: int = REPEAT.OFF,
-                 default_fade: tuple[float,float] = 0.0, read_func: bool | Callable = True) -> None:
+                 default_fade_in: float = 0.0, default_fade_out: float = 0.0,
+                 read_func: bool | Callable = True) -> None:
         self.volume = volume
         self.repeat = repeat
-        self.fade = default_fade
+        self.fade = default_fade_in , default_fade_out
         
         self.writer = threading.Thread(target=self.write,name="Track Queue Audio Bufferer")
         self.cmder  = threading.Thread(target=self.accept_commands,name="Track Queue Command Accepter")
         self.queuer = threading.Thread(target=self.queue,name="Track Queuer")
-        self.logic  = threading.Thread(target=self.track_start_end_logic,name="Track")
 
         # Resources that belong to the writer thread:
         self.current: deque[TrackNode] = deque([])
@@ -387,7 +387,6 @@ class TrackQueue(FFmpegPCMAudio):
         self.writer.start()
         self.cmder.start()
         self.queuer.start()
-        self.logic.start()
         if isinstance(read_func, bool):
             self.read = self.read_bytes if read_func else self.read_np_array
         else:
@@ -399,11 +398,13 @@ class TrackQueue(FFmpegPCMAudio):
         self.stop.set()
         for n in self.current:
             n.track.stream.end()
-        self.add_track_queue(QueueNode())
+        self.add_track_queue.put(TrackNode(None))
+        
+        if self.buffer.r.is_set(): self.read()
         self.writer.join()
+        self.command('end')
         self.cmder.join()
         self.queuer.join()
-        self.logic.join()
     def read_np_array(self):
         if self.paused: return ZERO_FRAME.copy()
         return self.buffer.read().astype(np.int16)
@@ -411,6 +412,7 @@ class TrackQueue(FFmpegPCMAudio):
         return self.read_np_array().tobytes()
     def write(self):
         while(not self.stop.is_set()):
+            self.track_start_end_logic()
             data = ZERO_FRAME_FLOAT.copy()
             for node in list(self.current):
                 if node.track.stream and node.track.stream.source_progress > 0:
@@ -438,52 +440,56 @@ class TrackQueue(FFmpegPCMAudio):
             self.history.remove(node)
         self.history.append(node) 
     def track_start_end_logic(self):
-        while(not self.stop.is_set()):
-            if self.current:
-                now_playing = self.current[-1]
-                nxt = now_playing.getnext(self.repeat)                              # IF THERE ARE ONE OR MORE CURRENTLY PLAYING SONGS:]
-                if (nxt):                                                           # -> IF the most recent track has a track following it in the queue:
-                    tte: int = now_playing.track.stream.time_to_end                 # -> -> find the playing track's time till end
-                    if (tte < now_playing.track.fade_out()):
-                        if(now_playing not in self.history):
-                            self.add_track_history(now_playing)
-                        with nxt.lock:                                              # -> -> lock the following track
-                            b = nxt.track.fade_in() >= tte                          # -> -> IF the following track can start fading in:
-                        if b: self.add_new_track(nxt)                               # -> -> -> add it to the queue
-                elif (now_playing.track.ending and self.repeat == 4 and self.start):# -> IF the most recent track is the end of the queue and repeat-all is on
-                    self.add_new_track(self.start)                                  # -> -> add the song from the beginning of the queue again
-                #await asyncio.sleep(FRAMELENSEC)                                   # -> Wait one audio frame before looping
-            else:                                                                   # IF THERE ARE NO CURRENTLY PLAYING SONGS:
-                if self.history:                                                    # -> IF there is a history of tracks
-                    print('hello')
-                    t = self.history[-1].getnext(self.repeat)                       # -> -> IF the latest addition to the history has a new following track in the queue
-                    if t: self.add_new_track(t)                                     # -> -> -> add that following track to the currently playing list
-                elif self.start: self.add_new_track(self.start)                     # -> IF the queue is new and a song has been added: add it to the currently playing songs
-            sleep(0.01)                                                             # Wait a fifth of a second
+        if self.current:
+            now_playing = self.current[-1]
+            nxt = now_playing.getnext(self.repeat)                              # IF THERE ARE ONE OR MORE CURRENTLY PLAYING SONGS:]
+            if (nxt):                                                           # -> IF the most recent track has a track following it in the queue:
+                tte: int = now_playing.track.stream.time_to_end                 # -> -> find the playing track's time till end
+                if (tte < now_playing.track.fade_out()):
+                    if(now_playing not in self.history):
+                        self.add_track_history(now_playing)
+                    with nxt.lock:                                              # -> -> lock the following track
+                        b = nxt.track.fade_in() >= tte                          # -> -> IF the following track can start fading in:
+                    if b: self.add_new_track(nxt)                               # -> -> -> add it to the queue
+            elif (now_playing.track.ending and self.repeat == 4 and self.start):# -> IF the most recent track is the end of the queue and repeat-all is on
+                self.add_new_track(self.start)                                  # -> -> add the song from the beginning of the queue again
+            #await asyncio.sleep(FRAMELENSEC)                                   # -> Wait one audio frame before looping
+        else:                                                                   # IF THERE ARE NO CURRENTLY PLAYING SONGS:
+            if self.history:                                                    # -> IF there is a history of tracks
+                t = self.history[-1].getnext(self.repeat)                       # -> -> IF the latest addition to the history has a new following track in the queue
+                if t: self.add_new_track(t)                                     # -> -> -> add that following track to the currently playing list
+            elif self.start: self.add_new_track(self.start)                     # -> IF the queue is new and a song has been added: add it to the currently playing songs=
     def queue(self):
         def add_node_or_playlist():
-            toadd = self.add_track_queue.get()
-            #playlist
-            if isinstance(toadd,dict):
-                if len(toadd['i']) > 0:
-                    s1 = TrackNode(toadd['i'][0](),prevnode=self.end)
-                    n = s1
-                    for t in toadd['i'][1:]: n = TrackNode(t(),prevnode=n)
-                    s2 = TrackNode(toadd['m'][0](),prevnode=n)
+            while(True):
+                toadd = self.add_track_queue.get()
+                #playlist
+                if isinstance(toadd,dict):
+                    if len(toadd['i']) > 0:
+                        s1 = TrackNode(toadd['i'][0](),prevnode=self.end)
+                        n = s1
+                        for t in toadd['i'][1:]: n = TrackNode(t(),prevnode=n)
+                        s2 = TrackNode(toadd['m'][0](),prevnode=n)
+                    else:
+                        s1 = s2 = TrackNode(toadd['m'][0](),prevnode=self.end)
+                    n = s2
+                    for t in toadd['m'][1:]: n = TrackNode(t(),prevnode=n)
+                    n = PlaylistDelimiter((REPEAT.PLM,s2),toadd['mrm'],toadd['rrm'],prevnode=n)
+                    for t in toadd['o']: n = TrackNode(t(),prevnode=n)
+                    n = PlaylistDelimiter((REPEAT.PLA,s1),toadd['mrw'],toadd['rrw'],prevnode=n)
+                    self.end = n
+                # single track
                 else:
-                    s1 = s2 = TrackNode(toadd['m'][0](),prevnode=self.end)
-                n = s2
-                for t in toadd['m'][1:]: n = TrackNode(t(),prevnode=n)
-                n = PlaylistDelimiter((REPEAT.PLM,s2),toadd['mrm'],toadd['rrm'],prevnode=n)
-                for t in toadd['o']: n = TrackNode(t(),prevnode=n)
-                n = PlaylistDelimiter((REPEAT.PLA,s1),toadd['mrw'],toadd['rrw'],prevnode=n)
-                self.end = n
-            # single track
-            else:
-                if callable(toadd): toadd = TrackNode(toadd(),prevnode=self.end)
-                elif isinstance(toadd,TrackNode):
-                    if self.end != None: self.end.append(toadd)
-                    else: self.end = toadd
+                    if callable(toadd): 
+                        try: 
+                            toadd = TrackNode(toadd(),prevnode=self.end)
+                            if self.end is None:
+                                self.end = toadd
+                        except: continue
+                    elif isinstance(toadd,TrackNode):
+                        if self.end != None: self.end.append(toadd)
+                        else: self.end = toadd
+                break
         
         add_node_or_playlist()
         self.start = self.end.getbeginning()
@@ -544,6 +550,8 @@ class TrackQueue(FFmpegPCMAudio):
                 case "volume": volume(float(l[1]))
                 case "repeat": repeat(int(l[1]))
                 case "fade":   fade_setting(float(l[1]),float(l[2]))
+                case "end": break
+                case _: continue
     
     def __get_add_song_func(self, location:str, start:float = 0., end:float = -1., volume: float = 1.0, fade_in: Optional[float] = None, fade_out: Optional[float] = None, pre_searched: bool = False):
         def fmt(s,o): 

@@ -20,7 +20,15 @@ class SharedResource:
 class SharedConfig(SharedResource):
     def __init__(self, location: str):
         self.location = location
-        self.__file = open(location)
+        if not os.path.exists(location):
+            if os.path.exists("_internal\\" + location):
+                self.__file = open("_internal\\" + location,"r+")
+            else:
+                with open(location, 'w') as file:
+                    file.write("{}")
+                self.__file = open(location, "r+")
+        else:
+            self.__file = open(location, "r+")
         self.__res: dict
         try: d = json.load(self.__file)
         except: d = {}
@@ -42,5 +50,5 @@ class SharedConfig(SharedResource):
             self.__res.update(*args,**kwargs)
             self.__rewrite()            
 
-aio_cfg = SharedConfig(os.path.abspath("config\\audioplayer.json"))
-bot_cfg = SharedConfig(os.path.abspath("config\\bot.json"))
+aio_cfg = SharedConfig("config\\audioplayer.json")
+bot_cfg = SharedConfig("config\\bot.json")
