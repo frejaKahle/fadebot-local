@@ -91,11 +91,9 @@ class ProgressibleFFmpegPCMAudio(FFmpegPCMAudio):
         '''coroutine for writing audio from the source to the buffer'''
         while(self.end_time > 0 and self.source_progress + self.pass_time <= self.end_time):
             data = super().read()
+            if len(data) == 0: break
             self.source_progress += 20
-            self.raw_queue.write(data)\
-            
-
-        self.raw_queue.write(ZERO_FRAME.copy())
+            self.raw_queue.write(data)
         self.raw_queue.write(np.array([]))        
     def end(self):
         self.raw_queue.escape()
@@ -169,6 +167,9 @@ class Track():
     def restart(self): self.start()
     def read(self):
         data = self.stream.read()
+        if data.size == 0:
+            self.ending = True
+            return data, 0.
         m: float | np.ndarray[np.float64] = self.volume
         match self.stream.true_progress, (self.stream.end_time - self.stream.pass_time), self.fade_in(), self.fade_out():
             case a,b,c,d if a+d >= b and d > 0:
@@ -446,15 +447,14 @@ class TrackQueue(FFmpegPCMAudio):
         if self.current:
             now_playing = self.current[-1]
             nxt = now_playing.getnext(self.repeat)                              # IF THERE ARE ONE OR MORE CURRENTLY PLAYING SONGS:]
+            if nxt is None and now_playing.track.ending and self.repeat == 4:
+                self.start = nxt = TrackNode(self.start.track.copy(),None,self.start._nxt)
             if (nxt):                                                           # -> IF the most recent track has a track following it in the queue:
                 tte: int = now_playing.track.stream.time_to_end                 # -> -> find the playing track's time till end
-                if (tte < now_playing.track.fade_out()):
+                if (tte <= now_playing.track.fade_out()):
                     with nxt.lock:                                              # -> -> lock the following track
                         b = nxt.track.fade_in() >= tte                          # -> -> IF the following track can start fading in:
                     if b: self.add_new_track(nxt)                               # -> -> -> add it to the queue
-            elif (now_playing.track.ending and self.repeat == 4 and self.start):# -> IF the most recent track is the end of the queue and repeat-all is on
-                self.add_new_track(self.start)                                  # -> -> add the song from the beginning of the queue again
-            #await asyncio.sleep(FRAMELENSEC)                                   # -> Wait one audio frame before looping
         else:                                                                   # IF THERE ARE NO CURRENTLY PLAYING SONGS:
             if self.history:                                                    # -> IF there is a history of tracks
                 t = self.history[-1].getnext(self.repeat)                       # -> -> IF the latest addition to the history has a new following track in the queue
