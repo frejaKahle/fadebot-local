@@ -11,6 +11,7 @@ class FadeBot(commands.Bot):
         self.__voice_client: Optional[discord.VoiceClient] = None
         self.add_command(self.save_location)
         self.ready = threading.Event()
+        self.__playing = False
     @commands.command(name = 'savelocation')
     async def save_location(self, ctx: commands.Context):
         if ctx.author.voice: update = {
@@ -33,11 +34,15 @@ class FadeBot(commands.Bot):
     async def play_audio(self, audio_source: discord.AudioSource):
         if self.__voice_client == None and not await self.join_voice(): return
         self.__voice_client.play(audio_source)
+        self.__playing = True
     def stop_audio(self):
         if self.__voice_client != None and self.__voice_client.is_playing(): self.__voice_client.stop()
+        self.__playing = False
     async def on_ready(self):
         self.ready.set()
-
+    @property
+    def playing(self):
+        return self.__playing
 
 
 def generate_bot() -> tuple[FadeBot, threading.Thread]:

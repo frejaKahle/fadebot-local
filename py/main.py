@@ -7,8 +7,8 @@ from time import sleep
 from bot import generate_bot
 import gui
 
-def gui_func(callback):
-    thread = threading.Thread(target=gui.start_gui,args=[queue,callback])
+def gui_func(callback, bot):
+    thread = threading.Thread(target=gui.start_gui,args=[queue,bot,callback])
     thread.start()
     return thread
 
@@ -27,7 +27,7 @@ if __name__ == '__main__':
         bot.call_async_method(bot.close)
         raise SystemExit
     
-    gui_thread = gui_func(close)
+    gui_thread = gui_func(close, bot)
     
     bot_thread.join()
     gui_thread.join()

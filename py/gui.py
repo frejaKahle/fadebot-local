@@ -3,6 +3,7 @@ from os.path import abspath
 
 import eel.msIE
 from gui_pages import pages
+import cfg
 
 ## Globals
 current_page = ""
@@ -10,18 +11,14 @@ EMPTY_FUNCTION = lambda: None
 
 eel.init('files')
 
-global queue
+global queue, bot
 
-def start_gui(track_queue, on_close, **kwargs):
-    global queue
+def start_gui(track_queue, discord_bot, on_close, **kwargs):
+    global queue, bot
     queue = track_queue
+    bot = discord_bot
     eel.start('../index.html', close_callback=on_close, **kwargs)
     print('DONE')
-    
-@eel.expose
-def queue_song(location: str):
-    queue.add_song_to_queue(location)
-        
 
 @eel.expose
 def switch_page(pagename : str):
@@ -32,42 +29,31 @@ def switch_page(pagename : str):
         eel.switch_active_nav(f'nav-{current_page}',f'nav-{pagename}')
         current_page = pagename
 
-###########################
-# DISCORD SETUP FUNCTIONS #
-###########################
+############################
+# QUEUE RELATED FUNCTIUONS #
+############################
 
 @eel.expose
-def join_voice_channel(): pass
-@eel.expose
-def leave_voice_channel(): pass
-@eel.expose
-def change_discord_settings(settings): pass
+def queue_song(location: str):
+    queue.add_song_to_queue(location)
 
-#########################
-# AUDIO PLAYER CONTROLS #
-#########################
-audio_player_controls = {
-    '''A dictionary of callback functions that should be overwitten by the importer.'''
-                                                        # Provided callback for each control should:
-    "pause_toggle":                     EMPTY_FUNCTION, # toggle pause/resume audio 
-    "skip_song":                        EMPTY_FUNCTION, # skip the current song
-    "skip_song_fadeless":               EMPTY_FUNCTION, # skip the current song without crossfading
-    "clear_queue":                      EMPTY_FUNCTION, # clear the queue
-    "stop_playing":                     EMPTY_FUNCTION, # clear the queue and skip the current song without crossfade
-    "queue_song":                       EMPTY_FUNCTION, # find a song at the URL and add it to the queue
-    "insert_song":                      EMPTY_FUNCTION, # find the song and add it at the beginning of the queue
-    "replace_queue_with_song":          EMPTY_FUNCTION, # find the song, then clear the queue and add the song to the (now empty) queue
-    "replace_all_with_song":            EMPTY_FUNCTION, # find the song the URL, then clear the queue and add the song to the queue, then skip the current song
-    "queue_playlist":                   EMPTY_FUNCTION, # find a user playlist with the specified id and add it to the queue
-    "insert_playlist":                  EMPTY_FUNCTION, # find a playlist and add it
-    "replace_queue_with_playlist":      EMPTY_FUNCTION,
-    "replace_all_with_playlist":        EMPTY_FUNCTION
-}
 @eel.expose
-def send_audio_player_control_message(message_type,*args):
-    audio_player_controls[message_type](*args)
+def command(command: str):
+    queue.command(command)
 
 
+#####################
+# DISCORD FUNCTIONS #
+#####################
+
+@eel.expose
+def start_audio():
+    if not bot.playing:
+        bot.call_async_method(bot.play_audio,queue)
+
+@eel.expose
+def change_discord_settings(settings):
+    cfg.bot_cfg.set(settings)
 
 @eel.expose
 def get_playlists(): pass

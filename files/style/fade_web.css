@@ -5,6 +5,7 @@
   --nav-color:  #353236;
   --hl-color:   #3d3b3e;
   --hv-color:   #454246;
+  --ico-color:  #c3c3c3;
   --txt-color:  #f2f2f2;
   --hvtxt-color:#fff;
   --btn-rad:      max(0.5vh,3px);
@@ -99,6 +100,7 @@ body {
   text-align: center;
   padding: 0.8vh 1.4vh;
   text-decoration: none;
+  cursor: pointer;
 }
 .topnav a img {
   width: 1.35em;
@@ -123,7 +125,7 @@ body {
 }
 
 /* Change the color of links on hover */
-.topnav a:hover {
+.topnav a:hover, .icon:hover {
   background-color: var(--hv-color);
   color: var(--hvtxt-color);
 }
@@ -173,4 +175,57 @@ input[type="submit"],.form>button {
 input[type="text"] {
   flex: 1 !important;
   color: var(--txt-color);
+}
+
+.icon, .icorange {
+  border: 1px solid var(--hl-color);
+  flex: 0 0 calc(1vw + 1vh + 10px);
+  height: calc(1vw + 1vh + 10px);
+  padding: 0.5em;
+  border-radius: 1em;
+  filter: brightness(0.9);
+  cursor: pointer;
+}
+.icorange {
+  flex: 1;
+  max-width: max(500px, 30vw);
+}
+.icorange>* {
+  height: calc(1vw + 1vh + 10px - 1em);
+  margin-top: 0;
+  margin-bottom: 0;
+}
+.icorange>img {
+  flex: 0 0 calc(1vw + 1vh + 10px);
+  height: 100%;
+}
+
+
+input[type="range"] {
+  -webkit-appearance: none;  /* Override default CSS styles */
+  appearance: none;
+  width: 100%; /* Full-width */
+  height: calc(0.35vw + 0.35vh + 3.5px); /* Specified height */
+  border-radius: calc((0.35vw + 0.35vh + 3.5px) * 0.5);
+  background: var(--hv-color);
+  outline: none; /* Remove outline */
+  opacity: 0.7; /* Set transparency (for mouse-over effects on hover) */
+  -webkit-transition: .2s; /* 0.2 seconds transition on hover */
+  transition: opacity .2s;
+  filter: brightness(1.111);
+  position: relative;
+  top: 50%;
+  transform: translate(0,calc(-50% - 5px));
+}
+input[type="range"]:hover {
+  opacity: 1; /* Fully shown on mouse-over */
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; /* Override default look */
+  appearance: none;
+  width: calc(0.65vw + 0.65vh + 6.5px); /* Set a specific slider handle width */
+  height: calc(0.65vw + 0.65vh + 6.5px); /* Slider handle height */
+  border-radius: calc((0.65vw + 0.65vh + 6.5px) * 0.5);
+  background: var(--ico-color); 
+  cursor: pointer; /* Cursor on hover */
 }
