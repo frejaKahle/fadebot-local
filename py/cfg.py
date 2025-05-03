@@ -29,26 +29,28 @@ class SharedConfig(SharedResource):
                 self.__file = open(location, "r+")
         else:
             self.__file = open(location, "r+")
-        self.__res: dict
+        d: dict
         try: d = json.load(self.__file)
         except: d = {}
         super().__init__(d)
     def __rewrite(self):
-        self.__file.truncate()
-        json.dump(self.__res, self.__file)
+        d = self.get()
+        with self.lock:
+            self.__file.truncate(0)
+            self.__file.seek(0)
+            json.dump(d, self.__file, skipkeys=False, ensure_ascii=True, check_circular=True, allow_nan=True, cls=None, indent=None, separators=None)
+            self.__file.seek(0)
     def call(self,func: Callable, **kwargs) -> Any:
         with self.lock:
-            result = func(self.__res,**kwargs)
+            result = func(super().__res,**kwargs)
             self.__rewrite()
         return result
     def set(self, resource: dict):
-        with self.lock:
-            self.__res = resource
-            self.__rewrite()
+        self.set(resource)
+        self.__rewrite()
     def update(self,*args,**kwargs):
-        with self.lock:
-            self.__res.update(*args,**kwargs)
-            self.__rewrite()            
+        self.get().update(*args,**kwargs)
+        self.__rewrite()
 
 aio_cfg = SharedConfig("config\\audioplayer.json")
 bot_cfg = SharedConfig("config\\bot.json")

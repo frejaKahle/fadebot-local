@@ -10,6 +10,8 @@
   --hvtxt-color:#fff;
   --btn-rad:      max(0.5vh,3px);
   --con-rad:      calc(2.5 * var(--btn-rad));
+  --base-size:    min(1.778vh, 1vw);
+  --ctt-margin:   5px;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
@@ -47,16 +49,16 @@ body {
 }
 .columns>* {
   flex:1;
-  margin: 5px 0 5px 5px;
+  margin: var(--ctt-margin) 0 var(--ctt-margin) var(--ctt-margin);
 }
 .columns>.rows {
-  margin: 0 0 0 5px;
+  margin: 0 0 0 var(--ctt-margin);
 }
 .columns>*:last-child {
-  margin: 5px;
+  margin: var(--ctt-margin);
 }
 .columns>.rows:last-child {
-  margin: 0 5px 0 5px;
+  margin: 0 var(--ctt-margin) 0 var(--ctt-margin);
 }
 
 .rows {
@@ -66,39 +68,37 @@ body {
 }
 .rows>* {
   flex:1;
-  margin: 5px 5px 0 5px;
+  margin: var(--ctt-margin) var(--ctt-margin) 0 var(--ctt-margin);
 }
 .rows>*:last-child {
-  margin: 5px;
+  margin: var(--ctt-margin);
 }
 .rows>.columns {
-  margin: 5px 0 0 0;
+  margin: var(--ctt-margin) 0 0 0;
 }
 .rows>.columns:last-child {
-  margin: 5px 0 5px 0;
+  margin: var(--ctt-margin) 0 var(--ctt-margin) 0;
 }
 
 /* Add a black background color to the top navigation */
 .topnav {
   overflow: hidden;
-  border-bottom: solid var(--hv-color) 0.2vh;
-  margin-bottom: 0.3vh;
-  font-size: max(1.8vh,14px);
+  border-bottom: solid var(--hv-color) calc(0.1 * var(--base-size));
+  margin-bottom: calc(0.15 * var(--base-size));
+  font-size: calc(var(--base-size) + 2*var(--ctt-margin));
 }
 
 /* Style the links inside the navigation bar */
 .topnav a {
   float: left;
   background-color: var(--nav-color);
-  transition-property: background-color color;
-  transition: 200ms linear;
   border-top-left-radius: var(--btn-rad);
   border-top-right-radius: var(--btn-rad);
   border: solid var(--hl-color);
-  margin: 0 0.2vw;
+  margin: 0 calc(0.1 * var(--base-size));
   border-width: 1px 1px 0 1px;
   text-align: center;
-  padding: 0.8vh 1.4vh;
+  padding: calc(0.5 * var(--base-size)) calc(0.75 * var(--base-size));
   text-decoration: none;
   cursor: pointer;
 }
@@ -136,7 +136,7 @@ body {
 }
 
 #timeline {
-  flex: 0 0 8vh;
+  flex: 0 0 calc(4*var(--base-size));
   background-color: var(--tl-color);
 }
 
@@ -146,25 +146,25 @@ body {
   left: 50%;
   top: 50%;
   height: calc(100% + 2px);
-  width: 0.5vh;
+  width: calc(var(--base-size) / 4);
   background-color: var(--bg-color);
   transform: translate(-50%, -50%);
 }
 
 form *,.form * {
-  font-size: calc(1vw + 1vh + 10px);
-  height: calc(1vw + 1vh + 0.5em + 10px);
+  font-size: calc(2*var(--base-size));
+  height: calc(2*var(--base-size) + 2*var(--ctt-margin));
   background-color: var(--bg-color);
   color: var(--txt-color);
   outline: none;
   border: none;
-  border-radius: 1em;
-  padding: 0 0.5em 0 0.5em;
+  border-radius: calc(var(--base-size) / 2);
+  padding: 0 calc(var(--base-size) / 2) 0 calc(var(--base-size) / 2);
 }
 
 select option {
   color: var(--txt-color);
-  font-size: 0.8em;
+  font-size: calc(1.6*var(--base-size) + 1.6*var(--ctt-margin));
 }
 
 input[type="submit"],.form>button {
@@ -179,24 +179,25 @@ input[type="text"] {
 
 .icon, .icorange {
   border: 1px solid var(--hl-color);
-  flex: 0 0 calc(1vw + 1vh + 10px);
-  height: calc(1vw + 1vh + 10px);
-  padding: 0.5em;
-  border-radius: 1em;
+  flex: 0 0 calc(2*var(--base-size) + 2*var(--ctt-margin));
+  height: calc(2*var(--base-size) + 2*var(--ctt-margin));
+  padding: var(--ctt-margin);
+  border-radius: calc(3* var(--ctt-margin));
   filter: brightness(0.9);
   cursor: pointer;
 }
 .icorange {
   flex: 1;
-  max-width: max(500px, 30vw);
+  max-width: calc(30*var(--base-size));
+  flex-basis: calc(10*var(--base-size));
 }
 .icorange>* {
-  height: calc(1vw + 1vh + 10px - 1em);
+  height: calc(2*var(--base-size));
   margin-top: 0;
   margin-bottom: 0;
 }
 .icorange>img {
-  flex: 0 0 calc(1vw + 1vh + 10px);
+  flex: 0 0 calc(2*var(--base-size));
   height: 100%;
 }
 
@@ -205,8 +206,8 @@ input[type="range"] {
   -webkit-appearance: none;  /* Override default CSS styles */
   appearance: none;
   width: 100%; /* Full-width */
-  height: calc(0.35vw + 0.35vh + 3.5px); /* Specified height */
-  border-radius: calc((0.35vw + 0.35vh + 3.5px) * 0.5);
+  height: var(--base-size); /* Specified height */
+  border-radius: calc(var(--base-size) / 2);
   background: var(--hv-color);
   outline: none; /* Remove outline */
   opacity: 0.7; /* Set transparency (for mouse-over effects on hover) */
@@ -223,9 +224,12 @@ input[type="range"]:hover {
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none; /* Override default look */
   appearance: none;
-  width: calc(0.65vw + 0.65vh + 6.5px); /* Set a specific slider handle width */
-  height: calc(0.65vw + 0.65vh + 6.5px); /* Slider handle height */
-  border-radius: calc((0.65vw + 0.65vh + 6.5px) * 0.5);
+  width: var(--base-size); /* Set a specific slider handle width */
+  height: var(--base-size); /* Slider handle height */
+  border-radius: calc(var(--base-size) / 2);
   background: var(--ico-color); 
   cursor: pointer; /* Cursor on hover */
+}
+.hidden {
+  display: none !important;
 }

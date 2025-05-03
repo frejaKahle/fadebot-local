@@ -1,28 +1,69 @@
-document.getElementById("nav-home").addEventListener("click", ()=>{eel.switch_page("home")}, false);
-document.getElementById("nav-playlists").addEventListener("click", ()=>{eel.switch_page("playlists")}, false);
-document.getElementById("nav-discord").addEventListener("click", ()=>{eel.switch_page("discord")}, false);
-document.getElementById("nav-settings").addEventListener("click", ()=>{eel.switch_page("settings")}, false);
+const pages = ["home","playlists","discord","settings"];
+const content_div = document.getElementById("main_content");
+let current_page = pages[0];
 
-eel.expose(change_content);
-function change_content(html) {
-    content_div = document.getElementById("main_content");
-    while (content_div.firstChild) {
-        content_div.removeChild(content_div.lastChild);
-      }
-    content_div.innerHTML = html;
-    scripts = document.querySelectorAll("script");
-    if (scripts.length > 2) {
-        text = scripts[scripts.length - 2].textContent;
-        var newScript = document.createElement("script");
-        newScript.textContent = text;
-        content_div.appendChild(newScript);
+function page_dom(pagename) {
+    return document.getElementById(`page-${pagename}`);
+}
+function nav_dom(pagename) {
+    return document.getElementById(`nav-${pagename}`);
+}
+
+eel.expose(switch_page);
+function switch_page(pagename) {
+    if (pagename != current_page) {
+        page_dom(current_page).classList.add("hidden");
+        page_dom(pagename) .classList.remove("hidden");
+
+        nav_dom(pagename).classList.add("active");
+        nav_dom(current_page).classList.remove("active");
+        
+        current_page = pagename;   
     }
 }
 
-eel.expose(switch_active_nav);
-function switch_active_nav(prev_tab, next_tab) {
-    document.getElementById(prev_tab).classList.remove("active");
-    document.getElementById(next_tab).classList.add("active");
+
+const parser = new DOMParser();
+async function setup_pages() {
+    // Load all the pages and their scripts
+    await Promise.all(pages.map(async (pagename) => {
+        nav_dom(pagename).addEventListener("click", () => {switch_page(pagename)}, false);
+        content = await eel.get_page(pagename)();
+
+        parser.parseFromString(content, 'text/html').lastElementChild.lastElementChild.childNodes.forEach(node => {
+            if (node.tagName == 'SCRIPT') {
+                var s = document.createElement('script');
+                s.textContent = node.textContent;
+                document.body.appendChild(s);
+            }
+            else content_div.appendChild(node);
+        });
+        //var script = document.getElementById(`script-${pagename}`);
+        //if (script) {
+        //    var newScript = document.createElement("script");
+        //    newScript.textContent = script.textContent;
+        //    document.head.appendChild(newScript);
+        //}
+        if (pagename != current_page) page_dom(pagename).classList.add("hidden");
+    }));
+
+    // After the all html has loaded:
+
 }
 
-eel.switch_page("home");
+function swap_CaR(element) {
+    if (element.classList.contains("column")) element.classList.replace("column","row");
+    else element.classList.replace("row","column");
+}
+
+function update_responsive_flex_containers() {
+    let collection = document.getElementsByClassName("resp-CaR");
+    let elem;
+    for (let i = 0;i < collection.length; i++) {
+        elem = collection.item(i);
+        swap_CaR(elem);
+    }
+}
+
+
+setup_pages();

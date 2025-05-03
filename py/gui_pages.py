@@ -1,5 +1,8 @@
 #populated by build process from files in \pages\
-pages = {"discord" : """This is the discord page""","home" : """<div class="columns">
+pages = {"discord" : """<div id="page-discord">
+    This is the discord page
+</div>
+""","home" : """<div class="columns" id="page-home">
     <div class="rows">
         <div class="content-section columns" style="flex: 0 0;">
             <div class="form columns" id="queue_song">
@@ -23,15 +26,16 @@ pages = {"discord" : """This is the discord page""","home" : """<div class="colu
             <img class="icon" src="/assets/Skip_Playlist_NF.png" title="Skip Playlist Without Fading" id="skip_playlist_nf"/>
             <img class="icon" src="/assets/Rewind.png" title="Rewind" id="rewind"/>
             <img class="icon" src="/assets/Rewind_NF.png" title="Rewind Without Fading" id="rewind_nf"/>
-            <div class="icorange columns" style="flex-basis: calc((1vw + 1vh + 10px) * 3.5);" id="volume" title="Volume: 100%">
+            <div class="icorange columns" id="volume" title="Volume: 100%">
                 <img src="/assets/Volume3.png"/>
                 <input type="range" min="0.1" step="0.1" max="100.0" value="100.0"/>
             </div>
+            <img class="icon" src="/assets/bug.png" title="debug" id="debug"/>
         </div>
     </div>   
     <div class="content-section" id="timeline"></div>
 </div>
-<script>
+<script type="text/javascript" id="script-home">
     const repeat_map = {
          0: "Repeat_OFF", "Repeat_OFF": 0
         ,1: "Repeat_ONE", "Repeat_ONE": 1
@@ -56,16 +60,21 @@ pages = {"discord" : """This is the discord page""","home" : """<div class="colu
     };
 
     const pp = document.getElementById("play_pause");
+    var playpause = true;
     pp.onclick = function() {
-        if (this.title = "Pause") {
+        if (playpause) {
             this.title = "Play";
+            playpause = !playpause;
             this.src = "/assets/Play.png";
             eel.command("pause");
+            console.log("Pausing");
         }
         else {
             this.title = "Pause";
+            playpause = !playpause;
             this.src = "/assets/Pause.png"
-            eel.command("play");
+            eel.command("resume");
+            console.log("Playing");
         }
     };
 
@@ -77,6 +86,7 @@ pages = {"discord" : """This is the discord page""","home" : """<div class="colu
         this.dataset.repeat = i;
         console.log(this.dataset.repeat);
         eel.command(`repeat ${i}`);
+        eel.aio_config({"repeat":i});
     };
 
     const v = document.getElementById("volume");
@@ -85,11 +95,45 @@ pages = {"discord" : """This is the discord page""","home" : """<div class="colu
         v.title = `Volume: ${volume}%`;
         v.firstElementChild.src = `/assets/Volume${Math.ceil((volume-0.19)/33.33)}.png`
         eel.command(`volume ${volume/100}`);
+        eel.aio_config({"volume":Math.round(volume * 10)/1000});
     };
 
     const other_commands = ["skip","skip_nf","skip_playlist","skip_playlist_nf","rewind","rewind_nf"]
-    for (i = 0; i < 6; i++) {
-        cmd = other_commands[i]
-        document.getElementById(cmd).onclick = function () {eel.command(cmd)}
+    other_commands.forEach(cmd => {
+        document.getElementById(cmd).onclick = () => eel.command(cmd);
+    });
+
+    const debug = document.getElementById("debug").onclick = ((f) => {eel.debug()});
+
+    async function update_pt() {
+        let inf = await eel.queue_info()()
+        q = inf["queue"]
+        p = inf["current"]
+        h = inf["history"]
+
+        // Currently playing
+        for (i = 0; i < p.length; i++) {
+            if (p[i]["type"] == "track") {
+                img = p[i]["img"] | ""
+                ttl = p[i]["name"]
+                art = p[i]["artist"] | ""//TODD TODO TODO
+            }
+        }
     }
-</script>""","playlists" : """This is the playlists page""","settings" : """This is the settings page""",}
+
+    eel.aio_config()().then(cfg => {
+        
+        r.dataset.repeat = cfg.repeat;
+        r.src = `/assets/${repeat_map[cfg.repeat]}.png`;
+        r.title = `Repeating ${repeat_map.titles[cfg.repeat]}`;
+
+        v.title = `Volume: ${cfg.volume * 100}%`;
+        v.lastElementChild.value = cfg.volume * 100;
+    });
+</script>""","playlists" : """<div id="page-playlists">
+    This is the playlists page
+</div>
+""","settings" : """<div id="page-settings">
+    This is the settings page
+</div>
+""",}

@@ -323,6 +323,13 @@ class QueueNode:
         with self.lock: p = self._prv
         if p == None: return self
         return p.getbeginning()
+    def as_list(self):
+        b = self.getbeginning()
+        l = []
+        while b:
+            l.append(b)
+            b = b._nxt
+        return l
     def __contains__(self, item, s = True):
         with self.lock:
             n = self.getbeginning() if s else self._nxt
@@ -346,6 +353,9 @@ class TrackNode(QueueNode):
         if repeat_setting == REPEAT.ONE or (r := super().getnext(repeat_setting)) == self:
             r = self.replace(self.track.copy())
         return r
+    def track_dict(self):
+        t = self.track
+        return {"type":"track","name":t.name,"artist":t.artist,"img":t.image,"year":t.year,"album":t.album}
 class PlaylistDelimiter(QueueNode):
     def __init__(self,return_to_node_with_setting: tuple[int,TrackNode], max_repeats: int = -1, repeat_regardles:bool = False, prevnode: QueueNode | None = None, nextnode: QueueNode | None = None):
         super().__init__(prevnode,nextnode)
@@ -376,16 +386,19 @@ class TrackQueue(FFmpegPCMAudio):
         self.current: deque[TrackNode] = deque([])
         self.history: deque[TrackNode] = deque([])
 
-
         #shared resources
         self.loop = asyncio.new_event_loop()
         self.start: TrackNode | None = None
         self.end: QueueNode | None = None
         self.stop = threading.Event()
+        
         self.paused = False
         self.buffer = SingleBufferedAudio()
         self.add_track_queue: Queue[Callable[[],Track] | QueueNode] = Queue()
         self.command_queue: Queue[str] = Queue()
+
+        self.update_playing = threading.Event()
+        self.update_queue = threading.Event() 
 
         # finish setting up
         self.writer.start()
@@ -396,9 +409,19 @@ class TrackQueue(FFmpegPCMAudio):
         else:
             self.read = read_func
 
+    def debug(self) -> str:
+        o = f"Current: {[tn.track_dict()["name"] for tn in list(self.current)]}\nHistory: {[tn.track_dict()["name"] for tn in list(self.history)]}\nRepeat: {self.repeat}, Volume: {self.volume}\nPaused: {self.paused}"
+        print(o)
+        return o
+
     def read(self): pass 
     '''overwritten in __init__, subclass may implement by passing a callable read_func parameter to __init__ or by assinging self.read after super().__init__ is called'''
     def close(self):
+        s = ""
+        while not self.add_track_queue.empty(): s += f"\"{self.add_track_queue.get()}\", "
+        print(f"Queue: [{s[:-2]}]")
+        self.volume = 0.
+        self.paused = False
         self.stop.set()
         for n in self.current:
             n.track.stream.end()
@@ -431,7 +454,11 @@ class TrackQueue(FFmpegPCMAudio):
                         self.current.remove(node)
                         
             self.buffer.write(data)
-    def add_new_track(self,node):
+    def add_new_track(self,node : QueueNode):
+        if isinstance(node,TrackNode) and node.track.ending == True:
+            newnode = TrackNode(node.track.copy(),node._prv,node._nxt)
+            if node == self.end: self.end = node = newnode
+            else: node = newnode
         if node in self.current:
             self.current.remove(node)
             node.track.restart()
@@ -439,10 +466,14 @@ class TrackQueue(FFmpegPCMAudio):
         else: 
             self.current.append(node)
             node.track.start()
+        self.update_playing.set()
+
     def add_track_history(self,node):
         if node in self.history:
             self.history.remove(node)
         self.history.append(node) 
+        self.update_playing.set()
+
     def track_start_end_logic(self):
         if self.current:
             now_playing = self.current[-1]
@@ -482,35 +513,35 @@ class TrackQueue(FFmpegPCMAudio):
                 # single track
                 else:
                     if callable(toadd): 
+                        print(toadd())
                         try: 
                             toadd = TrackNode(toadd(),prevnode=self.end)
-                            if self.end is None:
-                                self.end = toadd
+                            self.end = toadd
                         except: continue
                     elif isinstance(toadd,TrackNode):
-                        if self.end != None: self.end.append(toadd)
-                        else: self.end = toadd
+                        self.end.append(toadd)
+                        self.end = toadd
                 break
         
         add_node_or_playlist()
         self.start = self.end.getbeginning()
         while(not self.stop.is_set()): 
             add_node_or_playlist()
-            sleep(0.2)
+            self.update_queue.set()
+            sleep(0.5)
+            
 
     def accept_commands(self):
         def nf(comm_func):
             curr_node, next_node = comm_func()
-            if isinstance(curr_node,TrackNode): curr_node.track.fade_out = lambda: 0
-            if isinstance(next_node,TrackNode): next_node.track.fade_in  = lambda: 0
+            if isinstance(curr_node,TrackNode): curr_node.track.stream.end_in(0)
+            if isinstance(next_node,TrackNode): next_node.track.fade_in = lambda: 0
 
         def skip() -> tuple[Optional[TrackNode],Optional[TrackNode]]:
             i = 0
             c = n = None
-            if self.current:
-                try: 
-                    while self.current[i].track.ending: i += 1
-                except: return None
+            if len(self.current) > 0:
+                while i < len(self.current) and list(self.current)[i].track.ending: i += 1
                 c = self.current[i]
                 c.track.skip()
                 n = self.current[i].getnext()
@@ -535,10 +566,11 @@ class TrackQueue(FFmpegPCMAudio):
                 
         def rewind() -> tuple[Optional[TrackNode],Optional[TrackNode]]:
             playing = len(self.current) > 0
-            progress = self.current[-1].true_progress > 3000 if playing else False
+            progress = playing and self.current[-1].track.stream.true_progress > 3000
             history = len(self.history) > 0
             
             c = self.current[-1] if playing else None
+            if isinstance(c,TrackNode): c.track.skip()
             n = None
             match playing, progress, history:
                 case A,B,C if A and not (C and B):   # Restart track
@@ -560,7 +592,7 @@ class TrackQueue(FFmpegPCMAudio):
             l = command.split(' ',3)
             des = l[0]
             match des:
-                case "skip":   skip()
+                case "skip": skip()
                 case "skip_nf": nf(skip)
                 case "skip_playlist": skip_playlist()
                 case "skip_playlist_nf": nf(skip_playlist)
@@ -604,13 +636,16 @@ class TrackQueue(FFmpegPCMAudio):
         self.command_queue.put(command)
     
     @property
-    def currently_playing(self) -> Optional[TrackNode]:
-        if self.current: return self.current[-1]
-        return None
+    def currently_playing(self) -> list[TrackNode]:
+        return [tn.track_dict() for tn in self.current]
     
     def as_dictionary(self) -> dict:
-        d = {"currently_playing": []
-            }#TODO
+        q = self.start.as_list() if self.start is not None else []
+        d = {"queue": [n.track_dict() if isinstance(n,TrackNode) else {"type":"pd","link":q.index(n.return_node)} for n in q]
+            ,"current": [n.track_dict() for n in list(self.current)]
+            ,"history": [n.track_dict() for n in list(self.history) if isinstance(n, TrackNode)]
+            }
+        return d
 
 class DigitalAudioTransformer: pass
 #TODO: echo, reverb, muffling?

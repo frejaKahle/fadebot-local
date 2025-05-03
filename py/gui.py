@@ -6,7 +6,6 @@ from gui_pages import pages
 import cfg
 
 ## Globals
-current_page = ""
 EMPTY_FUNCTION = lambda: None
 
 eel.init('files')
@@ -21,13 +20,9 @@ def start_gui(track_queue, discord_bot, on_close, **kwargs):
     print('DONE')
 
 @eel.expose
-def switch_page(pagename : str):
+def get_page(pagename : str):
     '''Switches the content on the web gui to a differe page located at ../web/pages/<pagename>.html'''
-    global current_page
-    if pagename != current_page:
-        eel.change_content(pages[pagename])
-        eel.switch_active_nav(f'nav-{current_page}',f'nav-{pagename}')
-        current_page = pagename
+    return pages[pagename]
 
 ############################
 # QUEUE RELATED FUNCTIUONS #
@@ -41,6 +36,9 @@ def queue_song(location: str):
 def command(command: str):
     queue.command(command)
 
+@eel.expose
+def queue_info():
+    return queue.as_dictionary()
 
 #####################
 # DISCORD FUNCTIONS #
@@ -61,3 +59,18 @@ def get_playlists(): pass
 def get_queue(): pass
 @eel.expose
 def get_song_timer(): pass
+
+@eel.expose
+def debug(): queue.debug()
+@eel.expose
+def aio_config(set_to = None):
+    if set_to == None:
+        return cfg.aio_cfg.get()
+    else:
+        cfg.aio_cfg.update(set_to)
+@eel.expose
+def bot_config(set_to = None):
+    if set_to == None:
+        return cfg.bot_cfg.get()
+    else:
+        cfg.bot_cfg.update(set_to)
