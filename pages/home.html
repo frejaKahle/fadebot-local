@@ -12,7 +12,7 @@
                 <button name="submit">Submit</button>
             </div>
         </div>
-        <div class="content-section columns" id="now_playing"></div>
+        <div class="content-section columns" id="now-playing"></div>
         <div class="content-section columns" style="flex: 0 0; justify-content: center;">
             <img class="icon" src="/assets/Pause.png" title="Pause" id="play_pause" disabled/>
             <img class="icon" src="/assets/Repeat_OFF.png" title="Repeating Off" id="repeat" data-repeat="0"/>
@@ -101,22 +101,6 @@
 
     const debug = document.getElementById("debug").onclick = ((f) => {eel.debug()});
 
-    async function update_pt() {
-        let inf = await eel.queue_info()()
-        q = inf["queue"]
-        p = inf["current"]
-        h = inf["history"]
-
-        // Currently playing
-        for (i = 0; i < p.length; i++) {
-            if (p[i]["type"] == "track") {
-                img = p[i]["img"] | ""
-                ttl = p[i]["name"]
-                art = p[i]["artist"] | ""//TODD TODO TODO
-            }
-        }
-    }
-
     eel.aio_config()().then(cfg => {
         
         r.dataset.repeat = cfg.repeat;
@@ -126,4 +110,32 @@
         v.title = `Volume: ${cfg.volume * 100}%`;
         v.lastElementChild.value = cfg.volume * 100;
     });
+
+
+    const np = document.getElementById("now-playing");
+    async function nowPlaying() {
+        songs = await eel.get_playing()();
+        np.innerHTML = "";
+        if (songs) songs.forEach(song => {
+            var container = document.createElement('div');
+            container.className = "rows";
+
+            var img = document.createElement("img");
+            img.setAttribute('src',song.img);
+            container.appendChild(img);
+
+            var title = document.createElement("h3");
+            title.innerHTML = song.name;
+            if (song.album) title.innerHTML += ` - ${song.album}`;
+            container.appendChild(title);
+
+            var artist = document.createElement("h4");
+            artist.innerHTML = `by ${song.artist}`;
+            container.appendChild(artist);
+
+            np.appendChild(container);
+        });
+    }
+    setInterval(nowPlaying,1000);
+
 </script>

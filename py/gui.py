@@ -59,6 +59,9 @@ def get_playlists(): pass
 def get_queue(): pass
 @eel.expose
 def get_song_timer(): pass
+@eel.expose
+def get_playing():
+    return queue.currently_playing
 
 @eel.expose
 def debug(): queue.debug()
@@ -74,3 +77,6 @@ def bot_config(set_to = None):
         return cfg.bot_cfg.get()
     else:
         cfg.bot_cfg.update(set_to)
+
+
+

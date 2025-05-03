@@ -2,6 +2,7 @@ const pages = ["home","playlists","discord","settings"];
 const content_div = document.getElementById("main_content");
 let current_page = pages[0];
 
+
 function page_dom(pagename) {
     return document.getElementById(`page-${pagename}`);
 }
@@ -48,7 +49,6 @@ async function setup_pages() {
     }));
 
     // After the all html has loaded:
-
 }
 
 function swap_CaR(element) {
@@ -64,6 +64,5 @@ function update_responsive_flex_containers() {
         swap_CaR(elem);
     }
 }
-
 
 setup_pages();

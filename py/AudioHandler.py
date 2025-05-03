@@ -397,8 +397,8 @@ class TrackQueue(FFmpegPCMAudio):
         self.add_track_queue: Queue[Callable[[],Track] | QueueNode] = Queue()
         self.command_queue: Queue[str] = Queue()
 
-        self.update_playing = threading.Event()
-        self.update_queue = threading.Event() 
+        self.update_playing: Callable[[list[dict]]] = lambda x: None
+        self.update_queue: Callable = lambda x: None
 
         # finish setting up
         self.writer.start()
@@ -426,6 +426,9 @@ class TrackQueue(FFmpegPCMAudio):
         for n in self.current:
             n.track.stream.end()
         self.add_track_queue.put(TrackNode(None))
+
+        self.update_playing(self.currently_playing)
+        self.update_queue(None)
         
         if self.buffer.r.is_set(): self.read()
         self.writer.join()
@@ -466,13 +469,14 @@ class TrackQueue(FFmpegPCMAudio):
         else: 
             self.current.append(node)
             node.track.start()
-        self.update_playing.set()
+        print(self.currently_playing)
+        self.update_playing(self.currently_playing)
 
     def add_track_history(self,node):
         if node in self.history:
             self.history.remove(node)
         self.history.append(node) 
-        self.update_playing.set()
+        self.update_playing(self.currently_playing)
 
     def track_start_end_logic(self):
         if self.current:
@@ -527,7 +531,7 @@ class TrackQueue(FFmpegPCMAudio):
         self.start = self.end.getbeginning()
         while(not self.stop.is_set()): 
             add_node_or_playlist()
-            self.update_queue.set()
+            self.update_queue(None)
             sleep(0.5)
             
 
