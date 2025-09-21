@@ -54,3 +54,4 @@ class SharedConfig(SharedResource):
 
 aio_cfg = SharedConfig("config\\audioplayer.json")
 bot_cfg = SharedConfig("config\\bot.json")
+playlists = SharedConfig("config\\playlists.json")

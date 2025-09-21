@@ -1,4 +1,4 @@
-import math, threading, asyncio, yt_dlp
+import threading, asyncio, yt_dlp, aiologic
 import numpy as np
 from io import BufferedIOBase
 from discord import FFmpegPCMAudio
@@ -32,7 +32,7 @@ REPEAT.ALL = 4  # Repeat setting for repeating everything in the queue
 
 OPTS = SimpleNamespace()
 OPTS.FFMPEG = {'before_options':'-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin',
-                       'options':'-vn'}
+                       'options':'-vn -filter:a "volume=0.15"'}
 OPTS.YTDLP = {'format':'bestaudio','noplaylist':True}
 
 def round_to_frame(n):
@@ -81,12 +81,9 @@ class ProgressibleFFmpegPCMAudio(FFmpegPCMAudio):
         self.true_progress = 0          # play progress in ms
         self.end_time = end_time        # end time in ms
         self.pass_time = pass_time      # starting offset in ms
-        self.thread: threading.Thread
-        
-    def create_writer(self):
-        '''creates an async task to buffer audio from the source'''
         self.thread = threading.Thread(target=self.write)
         self.thread.start()
+        
     def write(self):
         '''coroutine for writing audio from the source to the buffer'''
         while(self.end_time > 0 and self.source_progress + self.pass_time <= self.end_time):
@@ -129,7 +126,7 @@ class Track():
         
     def __init__(self,
                  stream_creator: Callable[[],ProgressibleFFmpegPCMAudio], name: str, artist:  str, image: str | None,
-                 album: str | None, year: int, volume: float = 1.0, fade_settings: tuple[Callable[[],int],Callable[[],int]] = lambda: (0, 0),
+                 album: str | None, year: int, volume: float = 1.0, fade_settings: tuple[Callable[[],int],Callable[[],int]] = (lambda: 0, lambda: 0),
                  fade_function: Callable[[np.ndarray[Any,np.int16],float,float],np.ndarray[Any,np.int16]] = fastfade) -> None:
         '''
         This class represents an audio source that also includes settings such as volume and crossfade timings. The stream is created by a callback funtion to allow restarting the song.
@@ -163,7 +160,6 @@ class Track():
         self.fade_in, self.fade_out = self.perm_in, self.perm_out
         self.ending = False
         self.stream = self.stream_creator()
-        self.stream.create_writer()
     def restart(self): self.start()
     def read(self):
         data = self.stream.read()
@@ -210,7 +206,7 @@ class Track():
         kwargs['options'] = kwargs['options'] + f' -ss {start/1000.}'
         kwargs.update({'pass_time':start,'end_time':end})
         def sc(): return ProgressibleFFmpegPCMAudio(stream_url, **kwargs)
-        return Track(sc, **song_info)
+        return cls(sc, **song_info)
 
     @classmethod
     def from_yt(cls, url: str, limits: tuple[float, float] = (0.0,-1.0), min_dur: int = 5, volume: float = 1.0, fade_settings: tuple[Callable[[],int],Callable[[],int]] = lambda: (0,0)) -> Self:
@@ -397,8 +393,8 @@ class TrackQueue(FFmpegPCMAudio):
         self.add_track_queue: Queue[Callable[[],Track] | QueueNode] = Queue()
         self.command_queue: Queue[str] = Queue()
 
-        self.update_playing: Callable[[list[dict]]] = lambda x: None
-        self.update_queue: Callable = lambda x: None
+        self.update_playing = aiologic.SimpleQueue()
+        self.update_queue = aiologic.SimpleQueue()
 
         # finish setting up
         self.writer.start()
@@ -410,16 +406,18 @@ class TrackQueue(FFmpegPCMAudio):
             self.read = read_func
 
     def debug(self) -> str:
-        o = f"Current: {[tn.track_dict()["name"] for tn in list(self.current)]}\nHistory: {[tn.track_dict()["name"] for tn in list(self.history)]}\nRepeat: {self.repeat}, Volume: {self.volume}\nPaused: {self.paused}"
+        o =(f"Queue: {[qs["name"] for qs in self.current_queue]}\n" +
+            f"Current: {[tn.track_dict()["name"] for tn in list(self.current)]}\n" +
+            f"History: {[tn.track_dict()["name"] for tn in list(self.history)]}\n" + 
+            f"Repeat: {self.repeat}, Volume: {self.volume}\n" + 
+            f"Paused: {self.paused}\n" +
+            f"Threads:\n  Writer | Alive: {self.writer.is_alive()}\n  Queuer | Alive: {self.queuer.is_alive()}\n  Cmmder | Alive {self.cmder.is_alive()}")
         print(o)
         return o
 
     def read(self): pass 
     '''overwritten in __init__, subclass may implement by passing a callable read_func parameter to __init__ or by assinging self.read after super().__init__ is called'''
     def close(self):
-        s = ""
-        while not self.add_track_queue.empty(): s += f"\"{self.add_track_queue.get()}\", "
-        print(f"Queue: [{s[:-2]}]")
         self.volume = 0.
         self.paused = False
         self.stop.set()
@@ -427,8 +425,8 @@ class TrackQueue(FFmpegPCMAudio):
             n.track.stream.end()
         self.add_track_queue.put(TrackNode(None))
 
-        self.update_playing(self.currently_playing)
-        self.update_queue(None)
+        self.update_playing.put(self.currently_playing)
+        self.update_queue.put(None)
         
         if self.buffer.r.is_set(): self.read()
         self.writer.join()
@@ -436,8 +434,9 @@ class TrackQueue(FFmpegPCMAudio):
         self.cmder.join()
         self.queuer.join()
     def read_np_array(self):
-        if self.paused: return ZERO_FRAME.copy()
-        return self.buffer.read().astype(np.int16)
+        if self.paused: r = ZERO_FRAME.copy()
+        else: r =self.buffer.read().astype(np.int16)
+        return r
     def read_bytes(self):
         return self.read_np_array().tobytes()
     def write(self):
@@ -445,7 +444,7 @@ class TrackQueue(FFmpegPCMAudio):
             self.track_start_end_logic()
             data = ZERO_FRAME_FLOAT.copy()
             for node in list(self.current):
-                if node.track.stream and node.track.stream.source_progress > 0:
+                if node.track.stream:
                     inp = node.track.read()
                     if inp == None: continue
                     if inp[0].shape[0] > 0:
@@ -455,6 +454,7 @@ class TrackQueue(FFmpegPCMAudio):
                             self.add_track_history(node)
                         node.track.stream.end()
                         self.current.remove(node)
+                        self.update_playing.put(self.currently_playing)
                         
             self.buffer.write(data)
     def add_new_track(self,node : QueueNode):
@@ -469,14 +469,12 @@ class TrackQueue(FFmpegPCMAudio):
         else: 
             self.current.append(node)
             node.track.start()
-        print(self.currently_playing)
-        self.update_playing(self.currently_playing)
+        self.update_playing.put(self.currently_playing)
 
     def add_track_history(self,node):
         if node in self.history:
             self.history.remove(node)
         self.history.append(node) 
-        self.update_playing(self.currently_playing)
 
     def track_start_end_logic(self):
         if self.current:
@@ -516,8 +514,7 @@ class TrackQueue(FFmpegPCMAudio):
                     self.end = n
                 # single track
                 else:
-                    if callable(toadd): 
-                        print(toadd())
+                    if callable(toadd):
                         try: 
                             toadd = TrackNode(toadd(),prevnode=self.end)
                             self.end = toadd
@@ -531,7 +528,7 @@ class TrackQueue(FFmpegPCMAudio):
         self.start = self.end.getbeginning()
         while(not self.stop.is_set()): 
             add_node_or_playlist()
-            self.update_queue(None)
+            self.update_queue.put(None)
             sleep(0.5)
             
 
@@ -546,7 +543,8 @@ class TrackQueue(FFmpegPCMAudio):
             c = n = None
             if len(self.current) > 0:
                 while i < len(self.current) and list(self.current)[i].track.ending: i += 1
-                c = self.current[i]
+                try: c = self.current[i]
+                except: return None, None
                 c.track.skip()
                 n = self.current[i].getnext()
                 if n is not None:
@@ -640,8 +638,14 @@ class TrackQueue(FFmpegPCMAudio):
         self.command_queue.put(command)
     
     @property
-    def currently_playing(self) -> list[TrackNode]:
+    def currently_playing(self) -> list[dict]:
         return [tn.track_dict() for tn in self.current]
+    @property
+    def current_queue(self,q = []) -> list[dict]:
+        if (self.repeat == REPEAT.ONE): return [self.current[-1].track_dict()] * 5
+        if (len(self.current) > 0 and (n := self.current[-1].getnext(self.repeat) != None)):
+            return self.current_queue(q + [n.track_dict()] if isinstance(n,TrackNode) else q)
+        return q
     
     def as_dictionary(self) -> dict:
         q = self.start.as_list() if self.start is not None else []

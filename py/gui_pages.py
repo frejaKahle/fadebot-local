@@ -115,35 +115,11 @@ pages = {"discord" : """<div id="page-discord">
         v.lastElementChild.value = cfg.volume * 100;
     });
 
-
-    const np = document.getElementById("now-playing");
-    async function nowPlaying() {
-        songs = await eel.get_playing()();
-        np.innerHTML = "";
-        if (songs) songs.forEach(song => {
-            var container = document.createElement('div');
-            container.className = "rows";
-
-            var img = document.createElement("img");
-            img.setAttribute('src',song.img);
-            container.appendChild(img);
-
-            var title = document.createElement("h3");
-            title.innerHTML = song.name;
-            if (song.album) title.innerHTML += ` - ${song.album}`;
-            container.appendChild(title);
-
-            var artist = document.createElement("h4");
-            artist.innerHTML = `by ${song.artist}`;
-            container.appendChild(artist);
-
-            np.appendChild(container);
-        });
-    }
-    setInterval(nowPlaying,1000);
-
-</script>""","playlists" : """<div id="page-playlists">
-    This is the playlists page
+</script>""","playlists" : """<div class="columns" id="page-playlists">
+    <div class="rows content-section" id="list-of-playlists">
+    </div>
+    <div class="rows content-section" id="playlist display">
+    </div>
 </div>
 ""","settings" : """<div id="page-settings">
     This is the settings page

@@ -20,6 +20,7 @@ def bot_func():
     return bot, thread
 
 if __name__ == '__main__':
+    threading
     bot, bot_thread = bot_func()
     def close(*a):
         queue.close()
@@ -29,5 +30,6 @@ if __name__ == '__main__':
     
     gui_thread = gui_func(close, bot)
     
-    bot_thread.join()
     gui_thread.join()
+    bot_thread.join()
+    

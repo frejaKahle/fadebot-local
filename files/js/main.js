@@ -1,7 +1,7 @@
 const pages = ["home","playlists","discord","settings"];
 const content_div = document.getElementById("main_content");
 let current_page = pages[0];
-
+let np;
 
 function page_dom(pagename) {
     return document.getElementById(`page-${pagename}`);
@@ -49,6 +49,7 @@ async function setup_pages() {
     }));
 
     // After the all html has loaded:
+    np = document.getElementById("now-playing");
 }
 
 function swap_CaR(element) {
@@ -63,6 +64,31 @@ function update_responsive_flex_containers() {
         elem = collection.item(i);
         swap_CaR(elem);
     }
+}
+
+eel.expose(nowPlaying);
+function nowPlaying(songs) {
+    if(!np) return;
+    np.innerHTML = "";
+    if (songs) songs.forEach(song => {
+        var container = document.createElement('div');
+        container.className = "rows";
+
+        var img = document.createElement("img");
+        img.setAttribute('src',song.img);
+        container.appendChild(img);
+
+        var title = document.createElement("h3");
+        title.innerHTML = song.name;
+        if (song.album) title.innerHTML += ` - ${song.album}`;
+        container.appendChild(title);
+
+        var artist = document.createElement("h4");
+        artist.innerHTML = `by ${song.artist}`;
+        container.appendChild(artist);
+
+        np.appendChild(container);
+    });
 }
 
 setup_pages();
