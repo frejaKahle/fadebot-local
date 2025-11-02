@@ -117,6 +117,7 @@ pages = {"discord" : """<div id="page-discord">
 
 </script>""","playlists" : """<div class="columns" id="page-playlists">
     <div class="rows content-section" id="list-of-playlists">
+        <button id="add-new-playlist">Add Playlist</button>
     </div>
     <div class="rows content-section" id="playlist display">
     </div>

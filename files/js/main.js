@@ -3,6 +3,7 @@ const content_div = document.getElementById("main_content");
 let current_page = pages[0];
 let np;
 
+
 function page_dom(pagename) {
     return document.getElementById(`page-${pagename}`);
 }

@@ -31,6 +31,18 @@ body {
   min-width: 480px;
 }
 
+button {
+  padding: calc(var(--base-size)* 0.35);
+  background-color: var(--cs-color);
+  color: var(--txt-color);
+  border-style: solid;
+  border-width: 0;
+  border-color: var(--hv-color);
+}
+button:hover {
+  background-color: var(--hl-color) !important;
+}
+
 /* Add a black background color to the top navigation */
 .topnav {
   height: var(--nav-height);
@@ -275,6 +287,21 @@ input[type="range"]::-webkit-slider-thumb {
   border-radius: 0 var(--con-rad) var(--con-rad) 0;
 }
 #list-of-playlists {
-  flex: calc(var(--base-size) * 30) 1 0;
+  position: relative;
+  flex: calc(var(--base-size) * 30) 0 0;
   max-width: 30vw;
+  min-height: 100%;
+}
+#add-new-playlist {
+  position: sticky;
+  font-size: calc(var(--base-size) * 1.5);
+  margin: 0;
+  top: calc(100% - var(--base-size) * 3);
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  max-height: calc(var(--base-size) * 3);
+  background-color: var(--cs-color);
+  border-top-width: 1px;
+  box-shadow: 0px calc(var(--base-size) * 0.5) var(--base-size) var(--base-size) var(--cs-color);
 }

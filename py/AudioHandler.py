@@ -1,7 +1,7 @@
 import threading, asyncio, yt_dlp, aiologic
 import numpy as np
 from io import BufferedIOBase
-from discord import FFmpegPCMAudio
+from discord import FFmpegPCMAudio, PCMAudio
 from mutagen import mp3, wave, aiff, aac, ogg, File
 from types import SimpleNamespace
 from typing import IO, Callable, Any, Self, Optional
@@ -33,7 +33,7 @@ REPEAT.ALL = 4  # Repeat setting for repeating everything in the queue
 OPTS = SimpleNamespace()
 OPTS.FFMPEG = {'before_options':'-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin',
                        'options':'-vn -filter:a "volume=0.15"'}
-OPTS.YTDLP = {'format':'bestaudio','noplaylist':True}
+OPTS.YTDLP = {'before_options':'-x','format':'bestaudio','quiet':True}
 
 def round_to_frame(n):
     '''Takes a number of miliseconds and rounds it to the nearest audio frame timing in ms'''
@@ -87,6 +87,7 @@ class ProgressibleFFmpegPCMAudio(FFmpegPCMAudio):
     def write(self):
         '''coroutine for writing audio from the source to the buffer'''
         while(self.end_time > 0 and self.source_progress + self.pass_time <= self.end_time):
+            #print("Writing Audio")
             data = super().read()
             if len(data) == 0: break
             self.source_progress += 20
@@ -156,7 +157,8 @@ class Track():
         self.ending: bool = False
 
     def start(self):
-        del self.stream
+        if hasattr(self, 'stream'):
+            del self.stream
         self.fade_in, self.fade_out = self.perm_in, self.perm_out
         self.ending = False
         self.stream = self.stream_creator()
@@ -195,7 +197,7 @@ class Track():
         return Track(self.stream_creator,self.name,self.artist,self.image,self.album,self.year,self.volume,(self.fade_in,self.fade_out),self.fade_function)
 
     @classmethod
-    def _verify_and_apply_section(cls, stream_url: str, limits: tuple[float, float], duration, min_dur: int, **song_info) -> Self:
+    def _verify_and_apply_section(cls, stream_url: str, limits: tuple[float, float], duration, min_dur: int = 5, **song_info) -> Self:
         '''Generates a song object from a stream, start/end limits, duration of the audio, minimum duration (fade times added), and song info.'''
         
         if max(min_dur,1) > duration: raise ValueError(f'Audio source must be at least {max(min_dur,1)} seconds in length.')
@@ -207,13 +209,14 @@ class Track():
         kwargs.update({'pass_time':start,'end_time':end})
         def sc(): return ProgressibleFFmpegPCMAudio(stream_url, **kwargs)
         return cls(sc, **song_info)
-
     @classmethod
-    def from_yt(cls, url: str, limits: tuple[float, float] = (0.0,-1.0), min_dur: int = 5, volume: float = 1.0, fade_settings: tuple[Callable[[],int],Callable[[],int]] = lambda: (0,0)) -> Self:
+    def yt_info(cls, url: str) -> dict:
         with yt_dlp.YoutubeDL(OPTS.YTDLP) as ydl:
             song_info = ydl.extract_info(url, download=False)
-            durtn = song_info['duration']
-            surl = song_info['url']
+            if ('_type' in song_info.keys() and song_info['_type'] == 'playlist'): return song_info
+            duration = song_info['duration']
+            stream_url = song_info['url']
+            image = song_info['thumbnail']
             try:
                 name = song_info['track']
                 artist = song_info['artist']
@@ -225,14 +228,9 @@ class Track():
                 album = None
                 try: year = int(song_info['release_date'][:4])
                 except: year = None
-
-            return cls._verify_and_apply_section(surl, limits, durtn, min_dur, 
-                                            name = name, artist = artist,
-                                            album = album, year = year,
-                                            image = song_info['thumbnail'],
-                                            volume = volume, fade_settings = fade_settings)
+            return {'duration': duration, 'stream_url': stream_url, 'name': name, 'artist': artist, 'album': album, 'year': year, 'image': image}
     @classmethod
-    def from_file(cls, file_location: str, limits: tuple[float, float] = (0.0,-1.0), min_dur: int = 5, volume: float = 1.0, fade_settings: tuple[Callable[[],int],Callable[[],int]] = lambda: (0,0)) -> Self:
+    def file_info(cls, file_location: str) -> dict:
         match file_location:
             case x if len(x) < 5: raise ValueError("Filename invalid: Too Short")
             case x if x[-4:] == '.mp3':     fi = mp3.MP3(x)
@@ -241,14 +239,24 @@ class Track():
             case x if x[-4:] == '.aac':     fi = aac.AAC(x)
             case x if x[-4:] == '.ogg':     fi = ogg.OggFileType(x)
             case _: raise ValueError("Filetype invalid: Must be: .mp3, .wav, .aiff, .aac, or .ogg")
-        durtn = fi.info.length
-    
-        return cls._verify_and_apply_section(file_location, limits, durtn, min_dur,
-                                name = fi['TIT2'][0], artist = fi['TPE1'][0],
-                                album = fi['TALB'][0], year = int(fi['TDRC'][0]),
-                                image = None,
-                                volume = volume, fade_settings = fade_settings)
-        
+        return {'duration': fi.info.length, 'stream_url': file_location, 'name': fi['TIT2'][0], 'artist': fi['TPE1'][0], 'album': fi['TALB'][0], 'year': int(fi['TDRC'][0]), 'image': None}
+    @classmethod
+    def generate_track_func(cls,location: str, limits: tuple[float, float], **playback_info):
+        if '.' in location[-5:]:
+            info = cls.file_info(location)
+        else:
+            info = cls.yt_info(location)
+        if '_type' in info.keys() and info['_type'] == 'playlist':
+            playlist = {'i':[],'m':[],'o':[],'mrm':-1,'rrm':False,'mrw':-1,'rrw':False}
+            playlist['m'] = [(lambda video=video: cls._verify_and_apply_section(**playback_info, stream_url=video['url'],limits=(-1.,-1.),duration=video['duration'],
+                                                                                image=video['thumbnail'],
+                                                                                name=(video['track'] if 'track' in video.keys() else video['title']),
+                                                                                artist=(video['artist'] if 'artist' in video.keys() else video['channel']),
+                                                                                year=(video['release_year'] if 'release_year' in video.keys() else video['release_date'][:4]),
+                                                                                album=(video['album'] if 'album' in video.keys() else None))) for video in info['entries'] if video]
+            return playlist
+        return lambda: cls._verify_and_apply_section(**info, **playback_info, limits=limits)
+
 class QueueNode:
     def __init__(self, prevnode: Self | None = None, nextnode: Self | None = None):
         self._prv: Self | None = prevnode
@@ -366,7 +374,7 @@ class PlaylistDelimiter(QueueNode):
                 return self.return_node
         return super().getnext(repeat_setting)
 
-class TrackQueue(FFmpegPCMAudio):
+class TrackQueue(PCMAudio):
     def __init__(self, volume: float = 1.0, repeat: int = REPEAT.OFF,
                  default_fade_in: float = 0.0, default_fade_out: float = 0.0,
                  read_func: bool | Callable = True) -> None:
@@ -406,12 +414,14 @@ class TrackQueue(FFmpegPCMAudio):
             self.read = read_func
 
     def debug(self) -> str:
-        o =(f"Queue: {[qs["name"] for qs in self.current_queue]}\n" +
-            f"Current: {[tn.track_dict()["name"] for tn in list(self.current)]}\n" +
-            f"History: {[tn.track_dict()["name"] for tn in list(self.history)]}\n" + 
+        d = self.as_dictionary()
+        o =(f"Queue: {d['queue']}\n" +
+            f"Current: {d['current']}\n" +
+            f"History: {d['history']}\n" + 
             f"Repeat: {self.repeat}, Volume: {self.volume}\n" + 
             f"Paused: {self.paused}\n" +
-            f"Threads:\n  Writer | Alive: {self.writer.is_alive()}\n  Queuer | Alive: {self.queuer.is_alive()}\n  Cmmder | Alive {self.cmder.is_alive()}")
+            f"Threads:\n  Writer | Alive: {self.writer.is_alive()}\n  Queuer | Alive: {self.queuer.is_alive()}\n  Cmmder | Alive {self.cmder.is_alive()}\n" +
+            f"Next: {self.current[-1].getnext(self.repeat)}")
         print(o)
         return o
 
@@ -444,7 +454,7 @@ class TrackQueue(FFmpegPCMAudio):
             self.track_start_end_logic()
             data = ZERO_FRAME_FLOAT.copy()
             for node in list(self.current):
-                if node.track.stream:
+                if hasattr(node.track, 'stream') and node.track.stream:
                     inp = node.track.read()
                     if inp == None: continue
                     if inp[0].shape[0] > 0:
@@ -458,10 +468,13 @@ class TrackQueue(FFmpegPCMAudio):
                         
             self.buffer.write(data)
     def add_new_track(self,node : QueueNode):
+        """
         if isinstance(node,TrackNode) and node.track.ending == True:
+            print("aaaaa")
             newnode = TrackNode(node.track.copy(),node._prv,node._nxt)
             if node == self.end: self.end = node = newnode
             else: node = newnode
+            """
         if node in self.current:
             self.current.remove(node)
             node.track.restart()
@@ -482,15 +495,16 @@ class TrackQueue(FFmpegPCMAudio):
             nxt = now_playing.getnext(self.repeat)                              # IF THERE ARE ONE OR MORE CURRENTLY PLAYING SONGS:]
             if nxt is None and now_playing.track.ending and self.repeat == 4:
                 self.start = nxt = TrackNode(self.start.track.copy(),None,self.start._nxt)
-            if (nxt):                                                           # -> IF the most recent track has a track following it in the queue:
+            if (nxt and hasattr(self.current, 'stream')):                       # -> IF the most recent track has a track following it in the queue:
                 tte: int = now_playing.track.stream.time_to_end                 # -> -> find the playing track's time till end
                 if (tte <= now_playing.track.fade_out()):
                     with nxt.lock:                                              # -> -> lock the following track
+                        nxt.track.restart()
                         b = nxt.track.fade_in() >= tte                          # -> -> IF the following track can start fading in:
                     if b: self.add_new_track(nxt)                               # -> -> -> add it to the queue
         else:                                                                   # IF THERE ARE NO CURRENTLY PLAYING SONGS:
             if self.history:                                                    # -> IF there is a history of tracks
-                t = self.history[-1].getnext(self.repeat)                       # -> -> IF the latest addition to the history has a new following track in the queue
+                t = self.history[-1].getnext(REPEAT.OFF)                        # -> -> IF the latest addition to the history has a new following track in the queue
                 if t: self.add_new_track(t)                                     # -> -> -> add that following track to the currently playing list
             elif self.start: self.add_new_track(self.start)                     # -> IF the queue is new and a song has been added: add it to the currently playing songs=
     def queue(self):
@@ -546,7 +560,7 @@ class TrackQueue(FFmpegPCMAudio):
                 try: c = self.current[i]
                 except: return None, None
                 c.track.skip()
-                n = self.current[i].getnext()
+                n = self.current[i].getnext(self.repeat)
                 if n is not None:
                     self.add_new_track(n)
             return c, n
@@ -560,6 +574,9 @@ class TrackQueue(FFmpegPCMAudio):
                 c = self.current[i]
                 c.track.skip()
                 self.add_track_history(c)
+                while isinstance(p._nxt,PlaylistDelimiter):
+                    p = p._nxt
+                    print(p)
                 if p._nxt:
                     n = p._nxt
                     self.add_new_track(n)
@@ -608,15 +625,15 @@ class TrackQueue(FFmpegPCMAudio):
                 case "end": break
                 case _: continue
     
-    def __get_add_song_func(self, location:str, start:float = 0., end:float = -1., volume: float = 1.0, fade_in: Optional[float] = None, fade_out: Optional[float] = None, pre_searched: bool = False):
+    def __get_add_song_func(self, location:str, start:float = 0., end:float = -1., volume: float = 1.0, fade_in: Optional[float] = None, fade_out: Optional[float] = None, pre_searched: bool = False, **track_info):
         def fmt(s,o): 
             if s and s > 0: f = lambda: int(s*1000)
             else: f = lambda: int(self.fade[o]*1000)
             return f
         true_fade_settings = fmt(fade_in,0), fmt(fade_out,1)
-        gen = Track._verify_and_apply_section if pre_searched else (Track.from_file if '.' in location[-5:] else Track.from_yt)
-        def f(): return gen(location,(start,end), volume=volume, fade_settings=true_fade_settings)
-        return f
+        track_info.update({'location':location,'limits':(start,end),'volume':volume,'fade_settings':true_fade_settings})
+        gen = (lambda: Track._verify_and_apply_section(**track_info)) if pre_searched else Track.generate_track_func(**track_info)
+        return gen
 
     def add_song_to_queue(self, location:str, start:float = 0., end:float = -1., volume: float = 1.0, fade_in: Optional[float] = None, fade_out: Optional[float] = None, pre_searched: bool = False):
         self.add_track_queue.put(self.__get_add_song_func(location,start,end,volume,fade_in,fade_out,pre_searched))
@@ -643,13 +660,13 @@ class TrackQueue(FFmpegPCMAudio):
     @property
     def current_queue(self,q = []) -> list[dict]:
         if (self.repeat == REPEAT.ONE): return [self.current[-1].track_dict()] * 5
-        if (len(self.current) > 0 and (n := self.current[-1].getnext(self.repeat) != None)):
+        if (len(self.current) > 0 and (n := self.current[-1].getnext(self.repeat) != None) and n not in q):
             return self.current_queue(q + [n.track_dict()] if isinstance(n,TrackNode) else q)
         return q
     
     def as_dictionary(self) -> dict:
         q = self.start.as_list() if self.start is not None else []
-        d = {"queue": [n.track_dict() if isinstance(n,TrackNode) else {"type":"pd","link":q.index(n.return_node)} for n in q]
+        d = {"queue": [n.track_dict() if isinstance(n,TrackNode) else {"type":"pd","link":str(q.index(n.return_node)) + ", name: " + str(n.return_node.track_dict()['name'])} for n in q]
             ,"current": [n.track_dict() for n in list(self.current)]
             ,"history": [n.track_dict() for n in list(self.history) if isinstance(n, TrackNode)]
             }

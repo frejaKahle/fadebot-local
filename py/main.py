@@ -20,16 +20,25 @@ def bot_func():
     return bot, thread
 
 if __name__ == '__main__':
-    threading
-    bot, bot_thread = bot_func()
-    def close(*a):
-        queue.close()
-        bot.stop_audio()
-        bot.call_async_method(bot.close)
-        raise SystemExit
-    
-    gui_thread = gui_func(close, bot)
-    
-    gui_thread.join()
-    bot_thread.join()
-    
+    if (len(sys.argv) > 1 and sys.argv[1] == '--nobot'):
+        def close(*a):
+            queue.close()
+            raise SystemExit
+        
+        gui_thread = gui_func(close, None)
+
+        gui_thread.join()
+    else:
+        bot, bot_thread = bot_func()
+        def close(*a):
+            queue.close()
+            bot.stop_audio()
+            bot.call_async_method(bot.close)
+            raise SystemExit
+        
+        gui_thread = gui_func(close, bot)
+        
+        
+        gui_thread.join()
+        bot_thread.join()
+        
