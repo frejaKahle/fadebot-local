@@ -6,7 +6,7 @@ pages = {"discord" : """<div id="page-discord">
     <div class="rows">
         <div class="content-section columns" style="flex: 0 0;">
             <div class="form columns" id="queue_song">
-                <input name="location" placeholder="Individual Track Queue" required/>
+                <input name="location" placeholder="Track Queue" required/>
                 <button name="submit">Submit</button>
             </div>
             <div class="form columns" action="queue_playlist" id="queue_playlist">
@@ -48,6 +48,7 @@ pages = {"discord" : """<div id="page-discord">
     const qp = document.getElementById("queue_playlist");
     qs.lastElementChild.onclick = function(e) {
         x = qs.children[0].value;
+        qs.children[0].value = "";
         if (x == "") {return}
         console.log(`queueing song: ${x}`);
         eel.queue_song(x);
