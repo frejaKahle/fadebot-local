@@ -38,7 +38,7 @@ path_to_ffmpeg = path_to_ffmpeg if path.exists(path_to_ffmpeg) else path.join(pa
 OPTS.FFMPEG = { 'executable': path_to_ffmpeg,
                 'before_options':'-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin',
                 'options':'-vn -filter:a "volume=0.15"'}
-OPTS.YTDLP = {'before_options':'-x','format':'bestaudio','quiet':True}
+OPTS.YTDLP = {'before_options':'-x','format':'bestaudio','quiet':True,'ignoreerrors':True}
 
 def round_to_frame(n):
     '''Takes a number of miliseconds and rounds it to the nearest audio frame timing in ms'''
