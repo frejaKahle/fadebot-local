@@ -6,7 +6,7 @@
 **/playlists/*
 **/build/
 **/dist/
-main.spec
+**.spec
 pip
 build.py
 prebuild.py

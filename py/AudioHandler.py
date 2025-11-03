@@ -1,4 +1,5 @@
-import threading, asyncio, yt_dlp, aiologic
+import threading, sys, asyncio, yt_dlp, aiologic
+from os import path
 import numpy as np
 from io import BufferedIOBase
 from discord import FFmpegPCMAudio, PCMAudio
@@ -31,8 +32,12 @@ REPEAT.PLA = 3  # Repeat setting for repeating one playlist until skipped (does 
 REPEAT.ALL = 4  # Repeat setting for repeating everything in the queue
 
 OPTS = SimpleNamespace()
-OPTS.FFMPEG = {'before_options':'-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin',
-                       'options':'-vn -filter:a "volume=0.15"'}
+
+path_to_ffmpeg = path.join(path.dirname(sys.executable),'ffmpeg\\bin\\ffmpeg.exe')
+path_to_ffmpeg = path_to_ffmpeg if path.exists(path_to_ffmpeg) else path.join(path.dirname(path.dirname(__file__)),'dist\\ffmpeg\\bin\\ffmpeg.exe')
+OPTS.FFMPEG = { 'executable': path_to_ffmpeg,
+                'before_options':'-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin',
+                'options':'-vn -filter:a "volume=0.15"'}
 OPTS.YTDLP = {'before_options':'-x','format':'bestaudio','quiet':True}
 
 def round_to_frame(n):
