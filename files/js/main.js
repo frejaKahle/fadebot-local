@@ -93,3 +93,8 @@ function nowPlaying(songs) {
 }
 
 setup_pages();
+
+window.onresize = function() {
+    if (window.outerHeight < 330) window.resizeTo(window.outerWidth, 330);
+    if (window.outerWidth < 530) window.resizeTo(530,window.outerHeight);
+}

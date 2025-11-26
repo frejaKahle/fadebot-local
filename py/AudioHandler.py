@@ -133,7 +133,7 @@ class Track():
     def __init__(self,
                  stream_creator: Callable[[],ProgressibleFFmpegPCMAudio], name: str, artist:  str, image: str | None,
                  album: str | None, year: int, volume: float = 1.0, fade_settings: tuple[Callable[[],int],Callable[[],int]] = (lambda: 0, lambda: 0),
-                 fade_function: Callable[[np.ndarray[Any,np.int16],float,float],np.ndarray[Any,np.int16]] = fastfade) -> None:
+                 fade_function: Callable[[np.ndarray[Any,np.int16],float,float],np.ndarray[Any,np.int16]] = fastfade, *e_args, **e_kwargs) -> None:
         '''
         This class represents an audio source that also includes settings such as volume and crossfade timings. The stream is created by a callback funtion to allow restarting the song.
         stream_creator -- A function that returns a new copy of the audio stream in case the track needs to be restarted
@@ -260,7 +260,27 @@ class Track():
                                                                                 year=(video['release_year'] if 'release_year' in video.keys() else video['release_date'][:4]),
                                                                                 album=(video['album'] if 'album' in video.keys() else None))) for video in info['entries'] if video]
             return playlist
-        return lambda: cls._verify_and_apply_section(**info, **playback_info, limits=limits)
+        playback_info.update(info)
+        return lambda: cls._verify_and_apply_section(**playback_info, limits=limits)
+    @classmethod
+    def get_playlist_info(cls, location: str) -> list[dict]:
+        if 'http' in location[:5]:  info = cls.yt_info(location)
+        else:                       info = cls.file_info(location)
+        
+        if '_type' in info.keys() and info['_type'] == 'playlist':
+            return [{"stream_url":video['url'],
+                     "start":-1,"end":-1,
+                     "fade_in":-1,"fade_out":-1,
+                     "volume":1,
+                     "duration":video['duration'],
+                     "image":video['thumbnail'],
+                     "name":video['track'] if 'track' in video.keys() else video['title'],
+                     "artist":video['artist'] if 'artist' in video.keys() else video['channel'],
+                     "year":video['release_year'] if 'release_year' in video.keys() else video['release_date'][:4],
+                     "album":video['album'] if 'album' in video.keys() else None,
+                     "original_url":video['webpage_url']}
+                        for video in info['entries']]
+        return [{**info,"start":-1,"end":-1,"fade_in":-1,"fade_out":-1,"volume":1,"original_url":location}]
 
 class QueueNode:
     def __init__(self, prevnode: Self | None = None, nextnode: Self | None = None):
@@ -581,7 +601,6 @@ class TrackQueue(PCMAudio):
                 self.add_track_history(c)
                 while isinstance(p._nxt,PlaylistDelimiter):
                     p = p._nxt
-                    print(p)
                 if p._nxt:
                     n = p._nxt
                     self.add_new_track(n)
@@ -631,22 +650,31 @@ class TrackQueue(PCMAudio):
                 case _: continue
     
     def __get_add_song_func(self, location:str, start:float = 0., end:float = -1., volume: float = 1.0, fade_in: Optional[float] = None, fade_out: Optional[float] = None, pre_searched: bool = False, **track_info):
+        if 'stream_url' in track_info.keys():
+            idx1 = track_info['stream_url'].find("?expire=")
+            idx2 = track_info['stream_url'].find("&")
+            if(idx1 != -1 and idx2 != -1):
+                i = float(track_info['stream_url'][idx1 + 8:idx2])
+                if (time() > i):
+                    pre_searched = False
+                    location = track_info['original_url']
         def fmt(s,o): 
             if s and s > 0: f = lambda: int(s*1000)
             else: f = lambda: int(self.fade[o]*1000)
             return f
         true_fade_settings = fmt(fade_in,0), fmt(fade_out,1)
         track_info.update({'location':location,'limits':(start,end),'volume':volume,'fade_settings':true_fade_settings})
-        gen = (lambda: Track._verify_and_apply_section(**track_info)) if pre_searched else Track.generate_track_func(**track_info)
-        return gen
+        generator = (lambda: Track._verify_and_apply_section(**track_info)) if pre_searched else Track.generate_track_func(**track_info)
+        print(generator())
+        return generator
 
-    def add_song_to_queue(self, location:str, start:float = 0., end:float = -1., volume: float = 1.0, fade_in: Optional[float] = None, fade_out: Optional[float] = None, pre_searched: bool = False):
-        self.add_track_queue.put(self.__get_add_song_func(location,start,end,volume,fade_in,fade_out,pre_searched))
+    def add_song_to_queue(self, location:str, start:float = 0., end:float = -1., volume: float = 1.0, fade_in: Optional[float] = None, fade_out: Optional[float] = None, pre_searched: bool = False, **track_info):
+        self.add_track_queue.put(self.__get_add_song_func(location,start,end,volume,fade_in,fade_out,pre_searched, **track_info))
     
     def add_playlist_to_queue(self, intro: list[dict], main:  list[dict], outro: list[dict], 
                               max_repeats_main: int = -1, repeat_regardless_main: bool = False,
                               max_repeats_whole: int = -1, repeat_regardless_whole: bool = False):
-        lg = lambda x: [self.__get_add_song_func(**track) for track in x]
+        lg = lambda x: [self.__get_add_song_func(location="", pre_searched=True, **track) for track in x]
         i = lg(intro)
         m = lg(main)
         o = lg(outro)

@@ -26,7 +26,8 @@ html {
 
 body {
   height: calc(100vh - 2 * var(--body-margin));
-  margin: var(--body-margin);
+  padding: var(--body-margin);
+  margin: 0;
   min-height: 270px;
   min-width: 480px;
 }
@@ -258,8 +259,11 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 #now-playing img {
+  flex-grow: 0 !important;
   display: block;
-  width: 90%;
+  max-width: 90%;
+  max-height: fit-content;
+  width: auto;
   height: auto;
   border: 1px solid var(--hl-color);
   border-radius: calc(2 * var(--base-size));
@@ -304,4 +308,228 @@ input[type="range"]::-webkit-slider-thumb {
   background-color: var(--cs-color);
   border-top-width: 1px;
   box-shadow: 0px calc(var(--base-size) * 0.5) var(--base-size) var(--base-size) var(--cs-color);
+}
+
+#add-new-playlist-popup {
+  background-color: var(--cs-color);
+  width: 40vw;
+  min-width: 300px;
+  min-height: 80px;
+  height: 30vh;
+  z-index: 10000;
+  border-radius: var(--con-rad);
+  box-shadow: 0 0 var(--body-margin) 0 rgba(0,0,0,0.2);
+  justify-content: space-evenly;
+}
+#add-new-playlist-popup-bg {
+  content: '';
+  height: 100vh;
+  width: 100vw;
+  background-color: black;
+  opacity: 0.6;
+  z-index: 9999;
+}
+#add-new-playlist-popup, #add-new-playlist-popup-bg {
+  position: fixed;
+  overflow: visible;
+  visibility: hidden;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+}
+@keyframes fadeIn {
+  from {opacity: 0;}
+  to {opacity: 1;}
+}
+@keyframes fadeInTranslucent {
+  from {opacity: 0;}
+  to {opacity: 0.6;}
+}
+
+#add-new-playlist-popup.show {
+  visibility: visible;
+  animation: fadeIn 300ms ease-in-out;
+}
+
+#add-new-playlist-popup-bg.show {
+  visibility: visible;
+  animation: fadeInTranslucent 300ms ease-in-out;
+}
+
+#add-new-playlist-popup>* {
+  max-height: calc(var(--base-size)*3);
+  border: solid 1px var(--hl-color);
+}
+#add-new-playlist-popup>button {
+  margin-left: auto;
+  margin-right: auto; 
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+#buffering_icon {
+  opacity: 0;
+  position: fixed;
+  right: calc(1.5 * var(--body-margin));
+  bottom: calc(1.5 * var(--body-margin));
+  width: calc(3 * var(--base-size));
+  height: calc(3 * var(--base-size));
+  border-radius: var(--con-rad);
+  background: var(--cs-color);
+  border: solid 1.5px var(--hl-color);
+  transition: opacity 0.5s linear;
+}
+#buffering_icon.show {
+  opacity: 1;
+}
+#buffering_icon>* {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(2.5 * var(--base-size));
+  height: calc(2.5 * var(--base-size));
+  border-radius: 50%;
+  background-image: conic-gradient(var(--ico-color) 0deg 120deg, rgba(0,0,0,0) 121deg 130deg, var(--ico-color) 131deg 150deg, rgba(0,0,0,0) 151deg 160deg, var(--ico-color) 161deg 175deg, rgba(0,0,0,0) 176deg 185deg, var(--ico-color) 186deg 195deg, rgba(0,0,0,0) 196deg 359deg);
+  animation-name: rotate-centered;
+  animation-timing-function: linear;
+  animation-duration: 1s;
+  animation-iteration-count: infinite;
+}
+#buffering_icon>*::after {
+  content:'';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(2 * var(--base-size));
+  height: calc(2 * var(--base-size));
+  border-radius: 50%;
+  background-color: var(--cs-color);
+}
+@keyframes rotate-centered {
+  0% {
+    transform: translate(-50%, -50%) rotate(0);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(-360deg);
+  }
+}
+.playlist-entry {
+  flex-basis: calc(9 * var(--base-size));
+  flex-grow: 0; 
+  align-items: center;
+  border-width: 0px;
+  border-style: solid;
+  border-color: var(--hl-color);
+  border-radius: var(--con-rad);
+  box-shadow: 0 0 var(--body-margin) 0 rgba(0,0,0,0.6);
+}
+.playlist-entry img{
+  object-fit: cover;
+  height: calc(8 * var(--base-size));
+  width:  calc(8 * var(--base-size));
+  border-radius: var(--con-rad);
+  flex-grow: 0;
+  border: 0.25px solid var(--hl-color);
+}
+.playlist-entry img.queueable{
+  cursor: pointer;
+}
+
+.playlist-entry>div{
+  justify-content: space-evenly;
+}
+.playlist-entry>div>header{
+  flex-grow: 0;
+}
+.playlist-entry.active {
+  --angle: 45deg;
+  --bgrepeatsize: calc( 2 * var(--base-size));
+  background: repeating-linear-gradient(
+    var(--angle),
+    rgba(0,0,0,0),
+    rgba(0,0,0,0) calc(var(--bgrepeatsize) - 3px),
+    rgba(128,128,128,0.06) var(--bgrepeatsize),
+    rgba(128,128,128,0.06) calc(2* var(--bgrepeatsize) - 3px)
+  );
+  background-size: calc(100% + 4 * var(--bgrepeatsize)), calc(100% + 4 * var(--bgrepeatsize));
+  animation: animate-bg 6s linear infinite;
+}
+.playlist-entry.setup {
+  flex-basis: calc(7 * var(--base-size));
+}
+
+@keyframes animate-bg {
+  from {
+    background-position: calc(-2 / sin(var(--angle)) * var(--bgrepeatsize)) 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+.playlist-delimiter {
+  position: relative;
+  flex-basis: content;
+  flex-grow: 0;
+}
+.playlist-delimiter>h1 {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  max-width: max-content;
+  padding: var(--base-size);
+  margin: auto;
+  background-color: var(--cs-color);
+}
+.playlist-delimiter::after {
+  content: '';
+  position: relative;
+  display: block;
+  top: -50%;
+  left: 5%;
+  width: 90%;
+  height: calc(0.2 * var(--base-size));
+  z-index: 1;
+  background-color: var(--ico-color);
+  transform: translateY(100%);
+}
+.playlist-delimiter>button {
+  position: absolute;
+  z-index: 2;
+  background-color: var(--cs-color);
+  top: 50%;
+  right: 5%;
+  transform: translateY(calc(-50% + 1px));
+  --btn-size: calc(2.5 * var(--base-size));
+}
+.playlist-entry button {
+  --btn-size: calc(2 * var(--base-size) + 2 * var(--ctt-margin));
+}
+.playlist-delimiter>button, .playlist-entry button {
+  width: var(--btn-size);
+  height: var(--btn-size) ;
+  flex-basis: var(--btn-size) !important;
+  flex-grow: 0;
+  border-radius: var(--btn-rad);
+  border: solid calc(0.2 * var(--base-size)) var(--ico-color);
+  background-repeat: no-repeat;
+}
+.playlist-delimiter>button.plus, .playlist-entry button.plus{
+  background-image: linear-gradient(var(--ico-color), var(--ico-color)), linear-gradient(90deg, var(--ico-color), var(--ico-color));
+  background-size: 2px 60%, 60% 2px;
+  background-position: center center, center center;
+}
+.playlist-delimiter>button.play, .playlist-entry button.play{
+  --angle: 30deg;
+  background: linear-gradient(calc(180deg + var(--angle)), transparent 40%, var(--ico-color) 50%) 52.5% 25% / 57.5% 35%,
+              linear-gradient(calc(0deg - var(--angle)), transparent 40%, var(--ico-color) 50%) 52.5% 75% / 57.5% 35%;
+  background-repeat: no-repeat;
+}
+.playlist-delimiter>button.minus, .playlist-entry button.minus{
+  background-image: linear-gradient(90deg, var(--ico-color), var(--ico-color));
+  background-size: 60% 2px;
+  background-position: center center;
 }
